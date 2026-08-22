@@ -1,0 +1,6 @@
+{
+  "name": "PRIME Commerce",
+  "description": "PRIME Commerce shop and admin application integrated with Geoapify (Autocomplete, Geocoding, Reverse Geocoding, Road Routing, Map Tiles, IP Geolocation) and Taggun Receipt OCR API",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

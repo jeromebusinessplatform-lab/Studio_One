@@ -1,0 +1,49 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400&family=Ubuntu:wght@400&display=swap');
+
+@layer base {
+  html, body, #root {
+    height: 100dvh;
+    height: calc(100dvh + env(safe-area-inset-bottom));
+    width: 100dvw;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background-color: #f3f4f6;
+    color: #111827;
+    font-family: 'Ubuntu', sans-serif;
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Roboto Condensed', sans-serif;
+    font-weight: 400;
+  }
+}
+
+.font-heading {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-weight: 400;
+}
+
+.font-subheading {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-weight: 400;
+}
+
+.font-body {
+  font-family: 'Ubuntu', sans-serif;
+  font-weight: 400;
+}
+
+.font-condensed {
+  font-family: 'Roboto Condensed', sans-serif;
+}
+
