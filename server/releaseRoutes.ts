@@ -8,6 +8,7 @@ const TG_COOKIE = "prime_telegram_session";
 const TG_TTL_MS = 24 * 60 * 60 * 1000;
 const ADMIN_COOKIE = "prime_admin_session";
 const ADMIN_TTL_MS = 12 * 60 * 60 * 1000;
+const FIRESTORE_DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || "ai-studio-primecommerce-f59766ab-326b-40a2-bcc8-eae7f46dfe5f";
 
 function db() {
   if (!getApps().length) {
@@ -15,7 +16,7 @@ function db() {
     if (raw?.trim()) initializeApp({ credential: cert(JSON.parse(raw)) });
     else initializeApp({ credential: applicationDefault() });
   }
-  return getFirestore();
+  return getFirestore(FIRESTORE_DATABASE_ID);
 }
 function sign(payload: string, secret: string) { return crypto.createHmac("sha256", secret).update(payload).digest("hex"); }
 function sessionCookie(userId: string) {
