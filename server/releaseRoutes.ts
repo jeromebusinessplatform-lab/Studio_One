@@ -45,7 +45,7 @@ export function installReleaseRoutes(app: Application) {
 
   app.get("/api/orders", async (req, res) => {
     const isAdmin = adminSession(req); const tg = telegramUserId(req); if (!isAdmin && !tg) return res.status(401).json({ error: "Authentication required" });
-    try { const query = db().collection("orders").orderBy("createdAt", "desc"); const snap = await query.get(); const orders = snap.docs.map(d => plain(d.id, d.data())).filter(o => isAdmin || String(o.telegramUserId) === tg); return res.json({ orders }); }
+    try { let query = db().collection("orders").orderBy("createdAt", "desc"); const snap = await query.get(); const orders = snap.docs.map(d => plain(d.id, d.data())).filter(o => isAdmin || String(o.telegramUserId) === tg); return res.json({ orders }); }
     catch { return res.status(500).json({ error: "Unable to load orders" }); }
   });
 
