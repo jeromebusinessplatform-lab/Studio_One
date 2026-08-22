@@ -9,14 +9,21 @@ export function useCouriers() {
 
   useEffect(() => {
     const q = query(collection(db, "couriers"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Courier[];
-      setCouriers(data);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const data = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Courier[];
+        setCouriers(data);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Couriers listener error:", error);
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, []);

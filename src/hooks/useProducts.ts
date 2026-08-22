@@ -12,26 +12,42 @@ export function useProducts() {
   useEffect(() => {
     // Products
     const q = query(collection(db, "products"));
-    const unsubscribeProducts = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({
-        _id: doc.id,
-        ...doc.data(),
-      })) as Product[];
-      setProducts(data);
-      setLoading(false);
-    });
+    const unsubscribeProducts = onSnapshot(
+      q,
+      (snapshot) => {
+        const data = snapshot.docs.map((doc) => ({
+          _id: doc.id,
+          ...doc.data(),
+        })) as Product[];
+        setProducts(data);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Products listener error:", error);
+        setLoading(false);
+      }
+    );
 
     // Categories
     const categoriesRef = doc(db, "config", "categories");
-    const unsubscribeCategories = onSnapshot(categoriesRef, (docSnap) => {
+    const unsubscribeCategories = onSnapshot(
+      categoriesRef,
+      (docSnap) => {
         if (docSnap.exists()) {
-            setCategories(docSnap.data().list || INITIAL_CATEGORIES);
+          setCategories(docSnap.data().list || INITIAL_CATEGORIES);
         } else {
-            // Initialize if missing
-            setDoc(categoriesRef, { list: INITIAL_CATEGORIES });
-            setCategories(INITIAL_CATEGORIES);
+          // Initialize if missing
+          setDoc(categoriesRef, { list: INITIAL_CATEGORIES }).catch((e) =>
+            console.error("Initialize categories error:", e)
+          );
+          setCategories(INITIAL_CATEGORIES);
         }
-    });
+      },
+      (error) => {
+        console.error("Categories listener error:", error);
+        setCategories(INITIAL_CATEGORIES);
+      }
+    );
 
     return () => {
         unsubscribeProducts();

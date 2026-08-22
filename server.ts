@@ -7,6 +7,7 @@ import FormData from "form-data";
 import crypto from "node:crypto";
 import { cert, getApps, initializeApp, applicationDefault } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { installReleaseRoutes } from "./server/releaseRoutes.js";
 
 dotenv.config();
 
@@ -68,7 +69,7 @@ function getAdminDb() {
       initializeApp({ credential: applicationDefault() });
     }
   }
-  adminDb = getFirestore();
+  adminDb = getFirestore(process.env.FIRESTORE_DATABASE_ID || "ai-studio-primecommerce-f59766ab-326b-40a2-bcc8-eae7f46dfe5f");
   return adminDb;
 }
 
@@ -402,6 +403,8 @@ app.post("/api/ocr/analyze-receipt", async (req, res) => {
     return res.json({ success: true, result: { ...analyzeReceiptHeuristic(imageBase64, expectedAmount, expectedReceiver), executionTimeMs: Date.now() - startTime } });
   } catch (error: any) { console.error("Receipt OCR Server Error:", error); return res.status(500).json({ success: false, error: error.message || "Internal server error during OCR receipt processing" }); }
 });
+
+installReleaseRoutes(app);
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

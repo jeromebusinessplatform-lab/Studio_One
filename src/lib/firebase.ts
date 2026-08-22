@@ -13,6 +13,6 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+export const db = getFirestore(app, "ai-studio-primecommerce-f59766ab-326b-40a2-bcc8-eae7f46dfe5f");
 export const auth = getAuth(app);
 export const storage = getStorage(app);

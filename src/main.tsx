@@ -5,9 +5,10 @@ import './index.css';
 import 'leaflet/dist/leaflet.css';
 
 // Initialize Telegram WebApp if available
-if (window.Telegram?.WebApp) {
-  window.Telegram.WebApp.ready();
-  window.Telegram.WebApp.expand();
+const tgWebApp = (window as any).Telegram?.WebApp;
+if (tgWebApp) {
+  tgWebApp.ready();
+  tgWebApp.expand();
 }
 
 createRoot(document.getElementById('root')!).render(

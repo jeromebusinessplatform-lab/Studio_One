@@ -1,18 +1,54 @@
+import { useEffect } from "react";
 import { useTelegram } from "@/context/TelegramContext.tsx";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
 import { User, ShieldCheck, ShoppingBag, Bell, HelpCircle } from "lucide-react";
 
 export default function AccountPage() {
-  const { customer, isAuthenticated, isTelegramEnv, error: telegramError } = useTelegram();
-  const { customers, loading: customersLoading } = useCustomers();
+  const { customer, isAuthenticated, isTelegramEnv, error: telegramError, isLoading: isTelegramLoading } = useTelegram();
+  const { customers, loading: customersLoading, refresh } = useCustomers();
   const { orders } = useOrders(customer?.telegramUserId);
 
-  const customerData = customers.find(c => c.telegramUserId === customer?.telegramUserId);
+  useEffect(() => {
+    if (isAuthenticated) {
+      void refresh();
+    }
+  }, [isAuthenticated, refresh]);
 
-  if (customersLoading) return <div className="min-h-[60vh] flex items-center justify-center p-6 text-center text-neutral-500">Loading account...</div>;
-  if (!isTelegramEnv || !isAuthenticated || !customer) return <div className="min-h-[60vh] flex items-center justify-center p-6 text-center"><div><div className="font-bold text-lg">ACCOUNT UNAVAILABLE</div><p className="text-sm text-neutral-500 mt-2">Open PRIME from Telegram to access your customer account.</p>{telegramError && <p className="text-xs text-neutral-400 mt-2">{telegramError}</p>}</div></div>;
-  if (!customerData) return <div className="min-h-[60vh] flex items-center justify-center p-6 text-center"><div><div className="font-bold text-lg">ACCOUNT NOT FOUND</div><p className="text-sm text-neutral-500 mt-2">Your PRIME customer profile has not been created yet.</p></div></div>;
+  if (isTelegramLoading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-6 text-center text-neutral-500">
+        <div className="animate-pulse">Loading account...</div>
+      </div>
+    );
+  }
+
+  if (!isTelegramEnv || !customer) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-6 text-center">
+        <div>
+          <div className="font-bold text-lg">ACCOUNT UNAVAILABLE</div>
+          <p className="text-sm text-neutral-500 mt-2">Open PRIME from Telegram to access your customer account.</p>
+          {telegramError && <p className="text-xs text-neutral-400 mt-2">{telegramError}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  const customerRecord = customers.find(c => c.telegramUserId === customer?.telegramUserId);
+  const customerData = customerRecord || {
+    id: customer.telegramUserId,
+    telegramUserId: customer.telegramUserId,
+    telegramDisplayName: customer.telegramDisplayName,
+    telegramUsername: customer.telegramUsername,
+    primeMemberId: `PC${customer.telegramUserId.slice(0, 8).toUpperCase()}`,
+    vipTier: "Bronze" as const,
+    points: 0,
+    memberSince: Date.now(),
+    referrals: 0,
+    totalSpending: 0,
+    orderCount: 0,
+  };
 
   return (
     <div className="bg-[#f3f4f6] min-h-full pb-10">
