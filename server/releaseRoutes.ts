@@ -46,21 +46,16 @@ export function installReleaseRoutes(app: Application) {
       const customerRef = firestore.collection("customers").doc(String(user.id));
       const existing = await customerRef.get();
       const now = FieldValue.serverTimestamp();
-      await customerRef.set({
+      const customer: any = {
         id: String(user.id),
         telegramUserId: String(user.id),
         telegramDisplayName: [user.first_name, user.last_name].filter(Boolean).join(" ") || `TG User ${user.id}`,
         telegramUsername: user.username || null,
         primeMemberId: `PC${String(user.id).slice(0, 8).toUpperCase()}`,
-        vipTier: existing.exists ? undefined : "Bronze",
-        points: existing.exists ? undefined : 0,
-        memberSince: existing.exists ? undefined : now,
-        referrals: existing.exists ? undefined : 0,
-        totalSpending: existing.exists ? undefined : 0,
-        orderCount: existing.exists ? undefined : 0,
-        updatedAt: now,
-        ...(existing.exists ? {} : { createdAt: now })
-      }, { merge: true });
+        updatedAt: now
+      };
+      if (!existing.exists) Object.assign(customer, { vipTier: "Bronze", points: 0, memberSince: now, referrals: 0, totalSpending: 0, orderCount: 0, createdAt: now });
+      await customerRef.set(customer, { merge: true });
       setCookie(res, TG_COOKIE, sessionCookie(String(user.id)), TG_TTL_MS);
       return res.json({ authenticated: true, user });
     }
