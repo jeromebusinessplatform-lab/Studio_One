@@ -4,13 +4,15 @@ import { useOrders } from "@/hooks/useOrders";
 import { User, ShieldCheck, ShoppingBag, Bell, HelpCircle } from "lucide-react";
 
 export default function AccountPage() {
-  const { customer } = useTelegram();
-  const { customers } = useCustomers();
+  const { customer, isAuthenticated, isTelegramEnv, error: telegramError } = useTelegram();
+  const { customers, loading: customersLoading } = useCustomers();
   const { orders } = useOrders(customer?.telegramUserId);
 
   const customerData = customers.find(c => c.telegramUserId === customer?.telegramUserId);
 
-  if (!customerData) return <div>Loading...</div>;
+  if (customersLoading) return <div className="min-h-[60vh] flex items-center justify-center p-6 text-center text-neutral-500">Loading account...</div>;
+  if (!isTelegramEnv || !isAuthenticated || !customer) return <div className="min-h-[60vh] flex items-center justify-center p-6 text-center"><div><div className="font-bold text-lg">ACCOUNT UNAVAILABLE</div><p className="text-sm text-neutral-500 mt-2">Open PRIME from Telegram to access your customer account.</p>{telegramError && <p className="text-xs text-neutral-400 mt-2">{telegramError}</p>}</div></div>;
+  if (!customerData) return <div className="min-h-[60vh] flex items-center justify-center p-6 text-center"><div><div className="font-bold text-lg">ACCOUNT NOT FOUND</div><p className="text-sm text-neutral-500 mt-2">Your PRIME customer profile has not been created yet.</p></div></div>;
 
   return (
     <div className="bg-[#f3f4f6] min-h-full pb-10">
@@ -75,6 +77,7 @@ export default function AccountPage() {
                         <div>₱{order.total.toFixed(2)}</div>
                     </div>
                 ))}
+                {!orders.length && <div className="text-xs text-neutral-500">No orders yet.</div>}
             </div>
         </div>
       </div>
