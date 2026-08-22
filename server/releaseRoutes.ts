@@ -45,7 +45,7 @@ export function installReleaseRoutes(app: Application) {
 
   app.get("/api/orders", async (req, res) => {
     const isAdmin = adminSession(req); const tg = telegramUserId(req); if (!isAdmin && !tg) return res.status(401).json({ error: "Authentication required" });
-    try { let query = db().collection("orders").orderBy("createdAt", "desc"); const snap = await query.get(); const orders = snap.docs.map(d => plain(d.id, d.data())).filter(o => isAdmin || String(o.telegramUserId) === tg); return res.json({ orders }); }
+    try { const query = db().collection("orders").orderBy("createdAt", "desc"); const snap = await query.get(); const orders = snap.docs.map(d => plain(d.id, d.data())).filter(o => isAdmin || String(o.telegramUserId) === tg); return res.json({ orders }); }
     catch { return res.status(500).json({ error: "Unable to load orders" }); }
   });
 
@@ -72,5 +72,18 @@ export function installReleaseRoutes(app: Application) {
   });
   app.delete("/api/orders/:id", async (req, res) => { if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" }); try { await db().collection("orders").doc(req.params.id).delete(); return res.json({ success: true }); } catch { return res.status(500).json({ error: "Unable to delete order" }); } });
 
-  app.get("/api/customers", async (req, res) => { if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" }); try { const snap = await db().collection("customers").orderBy("updatedAt", "desc").get(); return res.json({ customers: snap.docs.map(d => plain(d.id, d.data())) }); } catch { return res.status(500).json({ error: "Unable to load customers" }); } });
+  app.get("/api/customers", async (req, res) => {
+    const isAdmin = adminSession(req);
+    const tg = telegramUserId(req);
+    if (!isAdmin && !tg) return res.status(401).json({ error: "Authentication required" });
+    try {
+      const ref = db().collection("customers");
+      if (isAdmin) {
+        const snap = await ref.orderBy("updatedAt", "desc").get();
+        return res.json({ customers: snap.docs.map(d => plain(d.id, d.data())) });
+      }
+      const snap = await ref.doc(tg).get();
+      return res.json({ customers: snap.exists ? [plain(snap.id, snap.data())] : [] });
+    } catch { return res.status(500).json({ error: "Unable to load customers" }); }
+  });
 }
