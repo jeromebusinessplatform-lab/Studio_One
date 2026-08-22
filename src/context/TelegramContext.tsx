@@ -12,6 +12,13 @@ interface TelegramContextType { isLoading: boolean; isAuthenticated: boolean; cu
 type TelegramWebApp = { initData?: string; initDataUnsafe?: { user?: { id: number; first_name: string; last_name?: string; username?: string; language_code?: string } }; ready?: () => void; expand?: () => void };
 function getTelegramWebApp(): TelegramWebApp | undefined { if (typeof window === "undefined") return undefined; return (window as any).Telegram?.WebApp; }
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try { return await fetch(input, { ...init, signal: controller.signal }); }
+  finally { window.clearTimeout(timeout); }
+}
+
 export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [customer, setCustomer] = useState<TelegramCustomer | null>(null);
@@ -28,13 +35,18 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
       if (!tg?.initDataUnsafe?.user || !initData) { if (!cancelled) { setIsTelegramEnv(false); setIsLoading(false); } return; }
       if (!cancelled) setIsTelegramEnv(true);
       try {
-        const response = await fetch("/api/auth/telegram", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ initData }) });
+        const response = await fetchWithTimeout("/api/auth/telegram", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ initData }) });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data.authenticated) throw new Error(data.error || "Telegram authentication failed");
         const user = data.user;
         if (!cancelled) { setCustomer({ telegramUserId: String(user.id), telegramDisplayName: [user.first_name, user.last_name].filter(Boolean).join(" ") || `TG User ${user.id}`, telegramUsername: user.username, telegramFirstName: user.first_name, telegramLastName: user.last_name, telegramLanguageCode: user.language_code || "en" }); setSessionToken(initData); setError(null); }
-      } catch (e: any) { if (!cancelled) { setCustomer(null); setSessionToken(null); setError(e?.message || "Telegram authentication failed"); } }
-      finally { if (!cancelled) setIsLoading(false); }
+      } catch (e: any) {
+        if (!cancelled) {
+          setCustomer(null);
+          setSessionToken(null);
+          setError(e?.name === "AbortError" ? "Telegram authentication timed out. Please reopen PRIME." : e?.message || "Telegram authentication failed");
+        }
+      } finally { if (!cancelled) setIsLoading(false); }
     };
     void authenticate(); return () => { cancelled = true; };
   }, []);
