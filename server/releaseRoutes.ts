@@ -37,8 +37,33 @@ function setCookie(res: Response, name: string, value: string, maxAge: number) {
 function plain(id: string, data: any) { const out: any = { id, ...data }; for (const [k, v] of Object.entries(out)) if (v instanceof Timestamp || (v && typeof (v as any).toMillis === "function")) out[k] = (v as any).toMillis(); return out; }
 
 export function installReleaseRoutes(app: Application) {
-  app.post("/api/auth/telegram", (req, res) => {
-    try { const initData = typeof req.body?.initData === "string" ? req.body.initData : ""; const result = verifyTelegramInitData(initData, process.env.TELEGRAM_BOT_TOKEN || ""); setCookie(res, TG_COOKIE, sessionCookie(String(result.user.id)), TG_TTL_MS); return res.json({ authenticated: true, user: result.user }); }
+  app.post("/api/auth/telegram", async (req, res) => {
+    try {
+      const initData = typeof req.body?.initData === "string" ? req.body.initData : "";
+      const result = verifyTelegramInitData(initData, process.env.TELEGRAM_BOT_TOKEN || "");
+      const user = result.user;
+      const firestore = db();
+      const customerRef = firestore.collection("customers").doc(String(user.id));
+      const existing = await customerRef.get();
+      const now = FieldValue.serverTimestamp();
+      await customerRef.set({
+        id: String(user.id),
+        telegramUserId: String(user.id),
+        telegramDisplayName: [user.first_name, user.last_name].filter(Boolean).join(" ") || `TG User ${user.id}`,
+        telegramUsername: user.username || null,
+        primeMemberId: `PC${String(user.id).slice(0, 8).toUpperCase()}`,
+        vipTier: existing.exists ? undefined : "Bronze",
+        points: existing.exists ? undefined : 0,
+        memberSince: existing.exists ? undefined : now,
+        referrals: existing.exists ? undefined : 0,
+        totalSpending: existing.exists ? undefined : 0,
+        orderCount: existing.exists ? undefined : 0,
+        updatedAt: now,
+        ...(existing.exists ? {} : { createdAt: now })
+      }, { merge: true });
+      setCookie(res, TG_COOKIE, sessionCookie(String(user.id)), TG_TTL_MS);
+      return res.json({ authenticated: true, user });
+    }
     catch (e: any) { return res.status(401).json({ authenticated: false, error: e?.message || "Telegram authentication failed" }); }
   });
   app.get("/api/auth/telegram/session", (req, res) => { const id = telegramUserId(req); return res.json({ authenticated: !!id, telegramUserId: id }); });
@@ -70,7 +95,8 @@ export function installReleaseRoutes(app: Application) {
     const allowed = ["orderStatus", "paymentStatus", "adminNotes", "receiptOcrData", "receiptUrl"]; const data: any = {}; for (const key of allowed) if (key in req.body) data[key] = req.body[key]; data.updatedAt = FieldValue.serverTimestamp();
     try { await db().collection("orders").doc(req.params.id).update(data); return res.json({ success: true }); } catch { return res.status(500).json({ error: "Unable to update order" }); }
   });
-  app.delete("/api/orders/:id", async (req, res) => { if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" }); try { await db().collection("orders").doc(req.params.id).delete(); return res.json({ success: true }); } catch { return res.status(500).json({ error: "Unable to delete order" }); } });
+  app.delete("/api/orders/:id", async (req, res) => { if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" }); try { await db().collection("orders").doc(req.params.id).delete(); return res.json({ success: true }); } catch { return res.status(500).json({ error: "Unable to delete order" }); }
+  });
 
   app.get("/api/customers", async (req, res) => {
     const isAdmin = adminSession(req);
