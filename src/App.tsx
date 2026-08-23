@@ -9,7 +9,7 @@ import OrientationLock from "./components/OrientationLock.tsx";
 import ShopLayout from "./pages/shop/layout.tsx";
 import ShopCatalog from "./pages/shop/page.tsx";
 import CartPage from "./pages/shop/cart.tsx";
-import CheckoutPage from "./pages/shop/checkout.tsx";
+import CheckoutPage from "./pages/shop/checkout-hardened.tsx";
 import OrderConfirmationPage from "./pages/shop/order-confirmation.tsx";
 import OrdersPage from "./pages/shop/orders.tsx";
 import AccountPage from "./pages/shop/account.tsx";
