@@ -3,6 +3,7 @@ import { installReleaseRoutes } from "./releaseRoutes.js";
 import { installProductComparisonRoutes } from "./productComparisonRoutes.js";
 import { installTelegramAvatarRoutes } from "./telegramAvatarRoutes.js";
 import { installAdminComparisonRoutes } from "./adminComparisonRoutes.js";
+import { migratePrimeMemberIds } from "./primeIdentity.js";
 
 const proto: any = (express.application as any);
 const originalListen = proto.listen;
@@ -13,6 +14,7 @@ if (!(proto as any).__primeReleaseRoutesInstalled) {
     installProductComparisonRoutes(this);
     installTelegramAvatarRoutes(this);
     installAdminComparisonRoutes(this);
+    void migratePrimeMemberIds();
     return originalListen.apply(this, args);
   };
 }
