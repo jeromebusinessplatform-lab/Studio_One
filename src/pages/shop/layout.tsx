@@ -23,15 +23,16 @@ export default function ShopLayout() {
   }
 
   return (
-    <div className="flex flex-col min-h-[100dvh] bg-[#f3f4f6] w-full max-w-[412px] mx-auto relative overflow-visible">
-      <div className="fixed top-0 w-full max-w-[412px] z-50 bg-[#f3f4f6]">
+    <div className="flex flex-col min-h-[100dvh] bg-[#f3f4f6] w-full relative">
+      <div className="fixed top-0 left-0 right-0 z-40 bg-white">
         <ShopHeader />
-        <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-neutral-300 to-transparent" />
         <QueueStrip />
       </div>
 
-      <main className="flex-1 min-h-0 w-full overflow-visible pt-[100px] pb-28 touch-pan-y">
-        <Outlet />
+      <main className="flex-1 w-full min-h-0 pt-[68px] pb-20">
+        <div className="w-full max-w-2xl mx-auto">
+          <Outlet />
+        </div>
       </main>
 
       <GlobalProprietaryFooter />

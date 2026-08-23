@@ -43,35 +43,33 @@ function AppShell() {
   const location = useLocation();
   const isAdmin = location.pathname.startsWith("/admin");
   return (
-    <div className="w-full min-h-[100dvh] flex flex-col items-center justify-start bg-neutral-950 overflow-x-hidden">
-      <div className={`w-full max-w-[412px] min-h-[100dvh] relative flex flex-col justify-start overflow-x-hidden shadow-2xl border-x border-neutral-800/20 ${isAdmin ? "bg-white" : "bg-[#f3f4f6]"}`}>
-        <div className="flex-1 w-full flex flex-col min-h-0">
-          <Routes>
-            <Route path="/" element={<Navigate to="/shop" replace />} />
-            <Route path="/shop" element={<ShopLayout />}>
-              <Route index element={<ShopCatalog />} /><Route path="cart" element={<CartPage />} /><Route path="checkout" element={<CheckoutPage />} /><Route path="order-confirmation/:orderId" element={<OrderConfirmationPage />} /><Route path="orders" element={<OrdersPage />} /><Route path="account" element={<AccountPage />} /><Route path="support" element={<SupportPage />} /><Route path="notifications" element={<NotificationsPage />} />
-            </Route>
-            <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin" element={<AdminGuard><AdminLayout /></AdminGuard>}>
-              <Route index element={<AdminDashboard />} />
-              <Route path="orders" element={<AdminOrdersPage />} />
-              <Route path="products" element={<AdminProductsPage />} />
-              <Route path="customers" element={<AdminCustomersPage />} />
-              <Route path="courier" element={<AdminCourierPage />} />
-              <Route path="charges" element={<AdminChargesPage />} />
-              <Route path="discounts" element={<AdminDiscountsPage />} />
-              <Route path="analytics" element={<AdminAnalyticsPage />} />
-              <Route path="cashflow" element={<AdminCashflowPage />} />
-              <Route path="support" element={<AdminSupportPage />} />
-              <Route path="ocr" element={<AdminReceiptOcrPage />} />
-              <Route path="settings" element={<AdminSettingsPage />} />
-              <Route path="*" element={<Navigate to="/admin" replace />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </div>
-        {isAdmin && <GlobalProprietaryFooter />}
+    <div className={`w-full min-h-[100dvh] flex flex-col justify-start overflow-x-hidden ${isAdmin ? "bg-white text-neutral-900" : "bg-[#f3f4f6] text-neutral-900"}`}>
+      <div className="flex-1 w-full flex flex-col min-h-0">
+        <Routes>
+          <Route path="/" element={<Navigate to="/shop" replace />} />
+          <Route path="/shop" element={<ShopLayout />}>
+            <Route index element={<ShopCatalog />} /><Route path="cart" element={<CartPage />} /><Route path="checkout" element={<CheckoutPage />} /><Route path="order-confirmation/:orderId" element={<OrderConfirmationPage />} /><Route path="orders" element={<OrdersPage />} /><Route path="account" element={<AccountPage />} /><Route path="support" element={<SupportPage />} /><Route path="notifications" element={<NotificationsPage />} />
+          </Route>
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin" element={<AdminGuard><AdminLayout /></AdminGuard>}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="orders" element={<AdminOrdersPage />} />
+            <Route path="products" element={<AdminProductsPage />} />
+            <Route path="customers" element={<AdminCustomersPage />} />
+            <Route path="courier" element={<AdminCourierPage />} />
+            <Route path="charges" element={<AdminChargesPage />} />
+            <Route path="discounts" element={<AdminDiscountsPage />} />
+            <Route path="analytics" element={<AdminAnalyticsPage />} />
+            <Route path="cashflow" element={<AdminCashflowPage />} />
+            <Route path="support" element={<AdminSupportPage />} />
+            <Route path="ocr" element={<AdminReceiptOcrPage />} />
+            <Route path="settings" element={<AdminSettingsPage />} />
+            <Route path="*" element={<Navigate to="/admin" replace />} />
+          </Route>
+          <Route path="*" element={<NotFound />} />
+        </Routes>
       </div>
+      {isAdmin && <GlobalProprietaryFooter />}
     </div>
   );
 }

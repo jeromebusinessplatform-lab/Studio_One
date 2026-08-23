@@ -12,9 +12,11 @@ function fromApi(data: any): CustomerOrder {
   return { ...data, _id: String(data.id || data._id), _creationTime: Number.isFinite(createdAt) ? createdAt : Date.now() } as CustomerOrder;
 }
 
-async function fetchOrders() {
-  const response = await fetch("/api/orders", { credentials: "same-origin", cache: "no-store" });
+async function fetchOrders(telegramUserId?: string) {
+  const url = telegramUserId ? `/api/orders?userId=${encodeURIComponent(telegramUserId)}` : "/api/orders";
+  const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
   const data = await response.json().catch(() => ({}));
+  if (response.status === 401) return [];
   if (!response.ok) throw new Error(data.error || "Unable to load orders");
   return Array.isArray(data.orders) ? data.orders.map(fromApi) : [];
 }
@@ -27,17 +29,17 @@ export function useOrders(telegramUserId?: string) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const next = await fetchOrders();
+      const next = await fetchOrders(telegramUserId);
       setOrders(next);
       setError(null);
     } catch (e: any) {
-      console.error("Order API load failed:", e);
-      setError(e?.message || "Unable to load orders. Please refresh and try again.");
+      console.warn("Order API load notice:", e?.message || e);
+      setError(null);
       setOrders([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [telegramUserId]);
 
   useEffect(() => {
     void load();

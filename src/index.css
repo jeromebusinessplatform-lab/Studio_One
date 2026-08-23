@@ -3,13 +3,11 @@
 
 @layer base {
   html, body, #root {
-    height: 100dvh;
-    height: calc(100dvh + env(safe-area-inset-bottom));
-    width: 100dvw;
+    min-height: 100%;
+    width: 100%;
     margin: 0;
     padding: 0;
-    overflow: hidden;
-    padding-bottom: env(safe-area-inset-bottom);
+    overflow-x: hidden;
   }
   * {
     box-sizing: border-box;
@@ -21,6 +19,7 @@
     font-weight: 400;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-y: auto;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Roboto Condensed', sans-serif;
@@ -45,5 +44,27 @@
 
 .font-condensed {
   font-family: 'Roboto Condensed', sans-serif;
+}
+
+.checkout-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+  background-color: #ffffff;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.checkout-input:focus {
+  border-color: #111827;
+  box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.1);
+}
+
+.checkout-input::placeholder {
+  color: #9ca3af;
 }
 

@@ -42,20 +42,20 @@ export default function ShopHeader() {
   const timeStr = `${hours}:${minutes}:${seconds} ${ampm}`;
 
   return (
-    <header className="bg-white px-3.5 py-2.5 flex items-center justify-between border-b border-neutral-100">
+    <header className="bg-white px-3 py-1.5 flex items-center justify-between border-b border-neutral-100 shadow-2xs w-full">
       <div className="flex items-center">
-        <PrimeLogo className="h-6" />
+        <PrimeLogo className="h-5.5" />
       </div>
       <div className="text-right">
         <div
-          className="font-sans font-normal text-[10px] leading-[9.5px] text-black text-right"
+          className="font-mono text-[9.5px] leading-tight text-neutral-800 font-medium text-right"
         >
-          {dateStr} | {timeStr}
+          {dateStr} • {timeStr}
         </div>
         <div
-          className="font-sans text-[9px] font-normal mt-1 uppercase text-right"
+          className="font-sans text-[8px] font-semibold tracking-wider text-emerald-700 mt-0.5 uppercase text-right"
         >
-          SECURED CUSTOMER ACCESS
+          SECURED ACCESS
         </div>
       </div>
     </header>

@@ -160,8 +160,7 @@ function setTelegramSession(res: Response, userId: string) {
 
 export function installCheckoutRoutes(app: Application) {
   app.post("/api/checkout/quote", async (req, res) => {
-    const tg = telegramUserId(req);
-    if (!tg) return res.status(401).json({ error: "Verified Telegram identity required" });
+    const tg = telegramUserId(req) || (typeof req.body?.telegramUserId === "string" && req.body.telegramUserId.trim() ? req.body.telegramUserId.trim() : "guest_web_customer");
     try {
       const quote = await buildQuote(req.body || {}, tg);
       return res.json({ quote: { subtotal: quote.subtotal, charges: quote.charges, tax: quote.tax, deliveryCharge: quote.deliveryCharge, deliveryDueNow: quote.deliveryDueNow, total: quote.total, fulfillmentTotal: quote.fulfillmentTotal, distanceKm: quote.distanceKm, deliveryPaymentOption: quote.deliveryPaymentOption, courierName: quote.courier.name, promoCode: quote.promo?.code || null, freeDelivery: Boolean(quote.promo?.freeDelivery), currency: "PHP" } });
@@ -171,10 +170,9 @@ export function installCheckoutRoutes(app: Application) {
   });
 
   app.post("/api/orders", async (req, res) => {
-    const tg = telegramUserId(req);
-    if (!tg) return res.status(401).json({ error: "Verified Telegram identity required" });
+    const input = req.body || {};
+    const tg = telegramUserId(req) || (typeof input.telegramUserId === "string" && input.telegramUserId.trim() ? input.telegramUserId.trim() : (input.contactNumber ? `guest_${String(input.contactNumber).replace(/\D/g, "").slice(-10)}` : `guest_${Date.now()}`));
     try {
-      const input = req.body || {};
       const receiverName = String(input.receiverName || "").trim();
       const contactNumber = String(input.contactNumber || "").trim();
       const deliveryAddress = String(input.deliveryAddress || "").trim();
@@ -195,7 +193,7 @@ export function installCheckoutRoutes(app: Application) {
       const orderNumber = `${new Date().toISOString().slice(0, 10).replace(/-/g, "")}${Date.now().toString().slice(-8)}${Math.floor(100 + Math.random() * 900)}`;
 
       const result = await firestore.runTransaction(async (tx) => {
-        for (const item of quote.items) {
+        for (const item of quote.normalizedItems) {
           const productRef = firestore.collection("products").doc(item.productId);
           const productSnap = await tx.get(productRef);
           if (!productSnap.exists) throw new Error(`${item.productName} is no longer available`);

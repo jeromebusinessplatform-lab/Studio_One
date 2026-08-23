@@ -7,7 +7,7 @@ export default function GlobalProprietaryFooter() {
   return (
     <footer
       id="global-proprietary-footer"
-      className={`fixed bottom-0 left-0 right-0 z-40 w-full max-w-[412px] mx-auto text-center py-1.5 px-3 border-t pointer-events-none select-none overflow-hidden ${
+      className={`fixed bottom-0 left-0 right-0 z-40 w-full text-center py-1 px-3 border-t pointer-events-none select-none overflow-hidden ${
         isAdmin
           ? "bg-[#eeeeee] text-neutral-600 border-neutral-300"
           : "bg-neutral-800 text-white/90 border-neutral-700"

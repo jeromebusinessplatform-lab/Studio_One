@@ -1,6 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Building2, Check, CreditCard, Edit2, Loader2, MapPin, ShieldCheck, ShoppingBag, Truck, User } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  Check,
+  CreditCard,
+  Edit2,
+  Loader2,
+  MapPin,
+  ShieldCheck,
+  ShoppingBag,
+  Truck,
+  User,
+  Phone,
+  Tag,
+  AlertCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useCart } from "@/context/CartContext.tsx";
 import { useTelegram } from "@/context/TelegramContext.tsx";
@@ -15,8 +31,28 @@ import { formatCurrency } from "@/lib/utils.ts";
 type Step = 1 | 2 | 3 | 4;
 type DeliveryPaymentOption = "PAY_AT_CHECKOUT" | "PAY_UPON_FULFILLMENT";
 type PaymentMethod = "TELEGRAM_PAY" | "DIRECT_TRANSFER";
-type Quote = { subtotal: number; charges: number; tax: number; deliveryCharge: number; deliveryDueNow: number; total: number; fulfillmentTotal: number; distanceKm: number; courierName: string; deliveryPaymentOption: DeliveryPaymentOption; promoCode?: string | null; freeDelivery?: boolean };
-const LABELS = ["Receiver", "Delivery", "Review", "Payment"] as const;
+
+type Quote = {
+  subtotal: number;
+  charges: number;
+  tax: number;
+  deliveryCharge: number;
+  deliveryDueNow: number;
+  total: number;
+  fulfillmentTotal: number;
+  distanceKm: number;
+  courierName: string;
+  deliveryPaymentOption: DeliveryPaymentOption;
+  promoCode?: string | null;
+  freeDelivery?: boolean;
+};
+
+const STEP_ITEMS = [
+  { id: 1 as Step, label: "Receiver" },
+  { id: 2 as Step, label: "Delivery" },
+  { id: 3 as Step, label: "Review" },
+  { id: 4 as Step, label: "Payment" },
+] as const;
 
 export default function CheckoutPage() {
   const { items, subtotal, selectedItems, selectedSubtotal, removeSelectedItems, clearCart } = useCart();
@@ -24,9 +60,11 @@ export default function CheckoutPage() {
   const { createOrder } = useOrders(customer?.telegramUserId);
   const { couriers, calculateDeliveryCharge } = useCouriers();
   const navigate = useNavigate();
+
   const checkoutItems = selectedItems.length ? selectedItems : items;
   const subtotalNow = selectedItems.length ? selectedSubtotal : subtotal;
   const itemsKey = useMemo(() => checkoutItems.map((i) => `${i.productId}:${i.quantity}`).join("|"), [checkoutItems]);
+
   const [step, setStep] = useState<Step>(1);
   const [receiver, setReceiver] = useState(customer?.telegramDisplayName || "");
   const [phone, setPhone] = useState("");
@@ -37,11 +75,29 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("TELEGRAM_PAY");
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [ocrResult, setOcrResult] = useState<ReceiptOcrResult | null>(null);
+
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const { addressInput, setAddressInput, suggestions, isLoading: geoLoading, isLocating, isOpen: geoOpen, setIsOpen: setGeoOpen, selectedLocation, selectSuggestion, detectCurrentLocation, detectIpLocation, routeInfo, isCalculatingRoute, geoConfig } = useAddressAutocomplete("");
+
+  const {
+    addressInput,
+    setAddressInput,
+    suggestions,
+    isLoading: geoLoading,
+    isLocating,
+    isOpen: geoOpen,
+    setIsOpen: setGeoOpen,
+    selectedLocation,
+    selectSuggestion,
+    detectCurrentLocation,
+    detectIpLocation,
+    routeInfo,
+    isCalculatingRoute,
+    geoConfig,
+  } = useAddressAutocomplete("");
+
   const selectedCourier = couriers.find((c) => c.id === courierId);
   const distanceKm = routeInfo?.distanceKm ?? 0;
   const routeReady = Boolean(routeInfo) && !isCalculatingRoute;
@@ -52,63 +108,730 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!customer?.telegramUserId || !selectedCourier || !routeReady || !checkoutItems.length) { setQuote(null); setQuoteError(null); return; }
-    setQuoteLoading(true); setQuoteError(null);
-    const payload = { items: checkoutItems.map((item) => ({ productId: item.productId, quantity: item.quantity })), deliveryProviderId: selectedCourier.id, distanceKm, deliveryPaymentOption, promoCode: promoCode.trim().toUpperCase() || undefined };
-    fetch("/api/checkout/quote", { method: "POST", credentials: "same-origin", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
-      .then(async (response) => { const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || "Unable to calculate secure checkout quote"); if (!data.quote) throw new Error("Checkout quote unavailable"); return data.quote as Quote; })
-      .then((nextQuote) => { if (!cancelled) setQuote(nextQuote); })
-      .catch((error: any) => { if (!cancelled) { setQuote(null); setQuoteError(error?.message || "Unable to calculate secure checkout quote"); } })
-      .finally(() => { if (!cancelled) setQuoteLoading(false); });
-    return () => { cancelled = true; };
+    if (!customer?.telegramUserId || !selectedCourier || !routeReady || !checkoutItems.length) {
+      setQuote(null);
+      setQuoteError(null);
+      return;
+    }
+
+    setQuoteLoading(true);
+    setQuoteError(null);
+
+    const payload = {
+      items: checkoutItems.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+      deliveryProviderId: selectedCourier.id,
+      distanceKm,
+      deliveryPaymentOption,
+      promoCode: promoCode.trim().toUpperCase() || undefined,
+    };
+
+    fetch("/api/checkout/quote", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Unable to calculate secure checkout quote");
+        if (!data.quote) throw new Error("Checkout quote unavailable");
+        return data.quote as Quote;
+      })
+      .then((nextQuote) => {
+        if (!cancelled) setQuote(nextQuote);
+      })
+      .catch((error: any) => {
+        if (!cancelled) {
+          setQuote(null);
+          setQuoteError(error?.message || "Unable to calculate secure checkout quote");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setQuoteLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [customer?.telegramUserId, quoteKey, routeReady, checkoutItems.length]);
 
   const validateReceiver = () => {
-    if (!customer?.telegramUserId) { toast.error("Open checkout from Telegram to continue."); return false; }
-    if (receiver.trim().length < 2) { toast.error("Enter the receiver name."); return false; }
-    if (!/^[0-9+()\-\s]{7,30}$/.test(phone.trim())) { toast.error("Enter a valid contact phone number."); return false; }
-    if (!addressInput.trim() || !selectedLocation) { toast.error("Select a delivery address from the suggested addresses."); return false; }
+    if (!customer?.telegramUserId) {
+      toast.error("Open checkout from Telegram to continue.");
+      return false;
+    }
+    if (receiver.trim().length < 2) {
+      toast.error("Enter the receiver name.");
+      return false;
+    }
+    if (!/^[0-9+()\-\s]{7,30}$/.test(phone.trim())) {
+      toast.error("Enter a valid contact phone number.");
+      return false;
+    }
+    if (!addressInput.trim() || !selectedLocation) {
+      toast.error("Select a delivery address from the suggested addresses.");
+      return false;
+    }
     return true;
   };
+
   const validateDelivery = () => {
-    if (!selectedCourier?.isAvailable) { toast.error("Select an available delivery provider."); return false; }
-    if (!routeReady) { toast.error("Wait for the delivery route to finish calculating."); return false; }
-    if (quoteLoading || !quote) { toast.error(quoteError || "Secure checkout pricing is not ready yet."); return false; }
+    if (!selectedCourier?.isAvailable) {
+      toast.error("Select an available delivery provider.");
+      return false;
+    }
+    if (!routeReady) {
+      toast.error("Wait for the delivery route to finish calculating.");
+      return false;
+    }
+    if (quoteLoading || !quote) {
+      toast.error(quoteError || "Secure checkout pricing is not ready yet.");
+      return false;
+    }
     return true;
   };
-  const validatePayment = () => { if (paymentMethod === "DIRECT_TRANSFER" && !receiptUrl) { toast.error("Upload payment proof before submitting."); return false; } return true; };
-  const goNext = () => { if (step === 1 && !validateReceiver()) return; if ((step === 2 || step === 3) && !validateDelivery()) return; setStep((Math.min(4, step + 1) as Step)); window.scrollTo({ top: 0, behavior: "smooth" }); };
+
+  const validatePayment = () => {
+    if (paymentMethod === "DIRECT_TRANSFER" && !receiptUrl) {
+      toast.error("Upload payment proof before submitting.");
+      return false;
+    }
+    return true;
+  };
+
+  const goNext = () => {
+    if (step === 1 && !validateReceiver()) return;
+    if ((step === 2 || step === 3) && !validateDelivery()) return;
+    setStep((Math.min(4, step + 1) as Step));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const goToStep = (target: Step) => {
+    if (target < step) {
+      setStep(target);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (target === 2 && validateReceiver()) {
+      setStep(2);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (target === 3 && validateReceiver() && validateDelivery()) {
+      setStep(3);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (target === 4 && validateReceiver() && validateDelivery()) {
+      setStep(4);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
   const submitOrder = async () => {
     if (!validateReceiver() || !validateDelivery() || !validatePayment() || !quote || !checkoutItems.length) return;
     setSubmitting(true);
     try {
-      const created = await createOrder({ telegramDisplayName: customer?.telegramDisplayName || receiver, telegramUsername: customer?.telegramUsername, items: checkoutItems.map((item) => ({ productId: item.productId, quantity: item.quantity })), receiverName: receiver.trim(), contactNumber: phone.trim(), deliveryAddress: addressInput.trim(), deliveryProviderId: selectedCourier?.id, distanceKm, deliveryPaymentOption, promoCode: promoCode.trim().toUpperCase() || undefined, paymentMethodName: paymentMethod === "TELEGRAM_PAY" ? "Telegram Pay" : "Direct Transfer / GCash / Maya", estimatedWaitingMinutes: routeInfo ? Math.max(15, Math.ceil(routeInfo.durationMinutes) + 12) : 15, estimatedDispatchTime: routeInfo ? `${Math.ceil(routeInfo.durationMinutes)} MIN TRANSIT` : "CALCULATING", adminNotes: notes.trim() || undefined, receiptUrl: receiptUrl || undefined, receiptOcrData: ocrResult || undefined });
-      if (selectedItems.length) removeSelectedItems(); else clearCart();
-      toast.success("Order submitted for review.");
-      navigate(`/shop/order-confirmation/${created.orderNumber}`, { state: { orderNumber: created.orderNumber, queuePosition: created.queuePosition, estimatedWaitingMinutes: created.estimatedWaitingMinutes, estimatedDispatchTime: created.estimatedDispatchTime, distanceKm: created.distanceKm } });
-    } catch (error: any) { console.error("Hardened checkout submission failed:", error); toast.error(error?.message || "Unable to submit the order. Please try again."); }
-    finally { setSubmitting(false); }
-  };
-  if (!checkoutItems.length) return <EmptyCheckout />;
+      const created = await createOrder({
+        telegramDisplayName: customer?.telegramDisplayName || receiver,
+        telegramUsername: customer?.telegramUsername,
+        items: checkoutItems.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        receiverName: receiver.trim(),
+        contactNumber: phone.trim(),
+        deliveryAddress: addressInput.trim(),
+        deliveryProviderId: selectedCourier?.id,
+        distanceKm,
+        deliveryPaymentOption,
+        promoCode: promoCode.trim().toUpperCase() || undefined,
+        paymentMethodName: paymentMethod === "TELEGRAM_PAY" ? "Telegram Pay" : "Direct Transfer / GCash / Maya",
+        estimatedWaitingMinutes: routeInfo ? Math.max(15, Math.ceil(routeInfo.durationMinutes) + 12) : 15,
+        estimatedDispatchTime: routeInfo ? `${Math.ceil(routeInfo.durationMinutes)} MIN TRANSIT` : "CALCULATING",
+        adminNotes: notes.trim() || undefined,
+        receiptUrl: receiptUrl || undefined,
+        receiptOcrData: ocrResult || undefined,
+      });
 
-  return <div className="bg-[#f3f4f6] min-h-full pb-14">
-    <header className="bg-white border-b border-neutral-200 px-4 py-3 sticky top-0 z-20 shadow-2xs">
-      <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-3"><button type="button" onClick={() => step === 1 ? navigate('/shop/cart') : setStep((step - 1) as Step)} className="p-1.5 rounded-lg hover:bg-neutral-100"><ArrowLeft size={19}/></button><div><h1 className="text-lg uppercase leading-none" style={{fontFamily:"'Roboto Condensed',sans-serif"}}>CHECKOUT</h1><p className="text-[11px] text-neutral-500 mt-0.5">Step {step} of 4 • {LABELS[step - 1]}</p></div></div><div className="text-right"><div className="text-[10px] text-neutral-400 uppercase">Total Payable</div><div className="text-sm font-semibold">{formatCurrency(payable)}</div></div></div>
-      <div className="mt-3 pt-2 border-t border-neutral-100 grid grid-cols-4 gap-1.5">{LABELS.map((label, index) => { const id = (index + 1) as Step; const passed = step > id; return <button key={label} type="button" disabled={id > step + 1} onClick={() => id < step ? setStep(id) : id === step + 1 ? goNext() : undefined} className={`py-2 rounded-lg text-[10px] uppercase ${step === id ? 'bg-neutral-900 text-white' : passed ? 'bg-neutral-100' : 'bg-neutral-50 text-neutral-400'}`}>{passed ? <Check size={10} className="inline mr-1"/> : id} {label}</button>; })}</div>
-    </header>
-    <main className="p-3 space-y-3">
-      {step === 1 && <form onSubmit={(e) => { e.preventDefault(); goNext(); }} className="space-y-3"><Card title="Receiver Information" icon={<User size={16}/>}><Field label="Receiver Full Name"><input value={receiver} onChange={(e) => setReceiver(e.target.value)} className="checkout-input" placeholder="Full name"/></Field><Field label="Contact Phone Number"><input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" className="checkout-input" placeholder="09XX XXX XXXX"/></Field></Card><Card title="Delivery Address" icon={<MapPin size={16}/>}><GeoAddressAutocomplete addressInput={addressInput} onAddressChange={setAddressInput} suggestions={suggestions} isLoading={geoLoading} isLocating={isLocating} isOpen={geoOpen} setIsOpen={setGeoOpen} selectedLocation={selectedLocation} onSelectSuggestion={selectSuggestion} onDetectGps={detectCurrentLocation} onDetectIp={detectIpLocation} routeInfo={routeInfo} isCalculatingRoute={isCalculatingRoute} warehouseName={geoConfig?.warehouse.name} hasGeoapifyKey={geoConfig?.hasApiKey}/><textarea value={notes} onChange={(e) => setNotes(e.target.value.slice(0,160))} className="checkout-input resize-none mt-3" rows={2} placeholder="Landmark, gate, unit, or rider instructions (optional)"/></Card><PrimaryButton label="Continue to Delivery"/></form>}
-      {step === 2 && <form onSubmit={(e) => { e.preventDefault(); goNext(); }} className="space-y-3"><Card title="Delivery Provider" icon={<Truck size={16}/>}><div className="grid grid-cols-3 gap-2">{couriers.map((courier) => { const selected = courier.id === courierId; const charge = calculateDeliveryCharge(courier, distanceKm); return <button key={courier.id} type="button" disabled={!courier.isAvailable} onClick={() => setCourierId(courier.id)} className={`relative min-h-[96px] rounded-xl border p-2 flex flex-col items-center justify-center ${selected ? 'bg-neutral-900 text-white border-black' : 'bg-white border-neutral-200'} ${courier.isAvailable ? '' : 'opacity-50'}`}><img src={courier.logoUrl} alt={courier.name} className="w-9 h-9 object-contain mb-1"/><span className="text-[9px] font-semibold text-center">{courier.name}</span><span className="text-[10px] font-bold mt-1">{charge ? formatCurrency(charge) : 'FREE ONLY WITH PROMO'}</span>{selected && <span className="absolute top-1 right-1 w-4 h-4 bg-white text-black rounded-full flex items-center justify-center"><Check size={10}/></span>}</button>; })}</div>{selectedCourier && routeInfo && <div className="mt-3 p-3 rounded-xl bg-neutral-50 border text-xs flex justify-between"><span>Route</span><span className="font-semibold">{distanceKm.toFixed(1)} km • {Math.ceil(routeInfo.durationMinutes)} min</span></div>}<div className="mt-3 p-3 rounded-xl bg-white border"><Field label="Promo Code"><div className="flex gap-2"><input value={promoCode} onChange={(e) => { setPromoCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0,64)); setQuote(null); }} className="checkout-input flex-1" placeholder="Enter authorized promo code" autoCapitalize="characters"/><button type="button" onClick={() => { if (!promoCode.trim()) toast.error('Enter a promo code first.'); else setQuoteError(null); }} className="px-4 rounded-lg bg-neutral-900 text-white text-xs font-semibold">APPLY</button></div><p className="text-[10px] text-neutral-400 mt-1">Free delivery is available only when the server confirms an active promo assigned to your Telegram account.</p></Field></div>{quoteLoading && <div className="mt-3 p-3 rounded-xl bg-neutral-50 border text-xs flex items-center gap-2"><Loader2 size={14} className="animate-spin"/>Calculating secure quote…</div>}{quoteError && <div className="mt-3 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">{quoteError}</div>}{quote?.freeDelivery && <div className="mt-3 p-3 rounded-xl bg-neutral-900 text-white border text-xs flex justify-between"><span>Authorized promotion</span><span className="font-semibold">FREE DELIVERY • {quote.promoCode}</span></div>}</Card><Card title="Delivery Fee Payment" icon={<Truck size={16}/>}><div className="grid grid-cols-2 gap-2">{(['PAY_AT_CHECKOUT','PAY_UPON_FULFILLMENT'] as DeliveryPaymentOption[]).map((value) => <button key={value} type="button" onClick={() => setDeliveryPaymentOption(value)} className={`p-3 rounded-xl border text-left ${deliveryPaymentOption === value ? 'bg-neutral-900 text-white border-black' : 'bg-white border-neutral-200'}`}><div className="text-xs font-semibold uppercase">{value === 'PAY_AT_CHECKOUT' ? 'Pay at Checkout' : 'Pay upon Fulfillment'}</div><div className="text-[10px] opacity-70 mt-1">{value === 'PAY_AT_CHECKOUT' ? 'Include delivery fee now.' : 'Settle delivery fee later.'}</div></button>)}</div></Card><div className="flex gap-2"><Back onClick={() => setStep(1)}/><PrimaryButton label={quote && !quoteLoading ? 'Review Order' : 'Waiting for Quote'} disabled={!quote || quoteLoading}/></div></form>}
-      {step === 3 && <div className="space-y-3"><Summary title="Receiver & Address" icon={<MapPin size={16}/>} onEdit={() => setStep(1)}><p className="font-semibold">{receiver}</p><p>{phone}</p><p>{addressInput}</p>{notes && <p className="italic">“{notes}”</p>}</Summary><Summary title="Delivery" icon={<Truck size={16}/>} onEdit={() => setStep(2)}><div className="flex justify-between"><span>{quote?.courierName || selectedCourier?.name}</span><span className="font-semibold">{quote?.deliveryDueNow ? formatCurrency(quote.deliveryDueNow) : 'FREE'}</span></div><p>{quote?.distanceKm?.toFixed(1)} km • {deliveryPaymentOption === 'PAY_AT_CHECKOUT' ? 'Pay at checkout' : 'Pay upon fulfillment'}</p>{quote?.freeDelivery && <p className="font-semibold">Authorized promo: {quote.promoCode}</p>}</Summary><Card title="Order Summary" icon={<ShoppingBag size={16}/>}><Line label="Items Subtotal" value={formatCurrency(quote?.subtotal ?? subtotalNow)}/><Line label="Service Charges" value={formatCurrency(quote?.charges ?? 0)}/><Line label="Tax" value={formatCurrency(quote?.tax ?? fallbackTax)}/><Line label="Delivery Due Now" value={quote?.deliveryDueNow ? formatCurrency(quote.deliveryDueNow) : 'FREE'}/><Line label="Delivery Total" value={quote?.deliveryCharge ? formatCurrency(quote.deliveryCharge) : 'FREE'}/><div className="pt-2 mt-1 border-t flex justify-between font-semibold"><span>Final Payable</span><span>{formatCurrency(payable)}</span></div></Card><div className="flex gap-2"><Back onClick={() => setStep(2)}/><PrimaryButton label="Continue to Payment" onClick={goNext}/></div></div>}
-      {step === 4 && <div className="space-y-3"><Card title="Payment Method" icon={<CreditCard size={16}/>}><div className="grid grid-cols-2 gap-2"><Pay selected={paymentMethod === 'TELEGRAM_PAY'} onClick={() => setPaymentMethod('TELEGRAM_PAY')} title="Telegram Pay" desc="Payment remains pending until verified."/><Pay selected={paymentMethod === 'DIRECT_TRANSFER'} onClick={() => setPaymentMethod('DIRECT_TRANSFER')} title="Bank / GCash / Maya" desc="Upload proof for verification."/></div>{paymentMethod === 'DIRECT_TRANSFER' && <div className="mt-3 bg-neutral-50 border rounded-xl p-3 text-[11px]"><div className="font-semibold uppercase flex items-center gap-1"><Building2 size={14}/>Beneficiary Account</div><div className="grid grid-cols-2 gap-2 mt-2"><div><span className="text-[9px] text-neutral-400 block">GCASH / MAYA</span><span className="font-semibold">0919 123 1234</span></div><div><span className="text-[9px] text-neutral-400 block">ACCOUNT NAME</span><span className="font-semibold">PRIME ENTERPRISE PH</span></div></div></div>}<ReceiptOcrScanner expectedAmount={payable} expectedReceiver="PRIME ENTERPRISE PH" initialReceiptUrl={receiptUrl || undefined} initialOcrResult={ocrResult} title={`Proof of Payment ${paymentMethod === 'DIRECT_TRANSFER' ? '(Required)' : '(Optional)'}`} onOcrComplete={(result, uri) => { setOcrResult(result); setReceiptUrl(uri); }} onRemoveReceipt={() => { setOcrResult(null); setReceiptUrl(null); }}/></Card><Summary title="Order Total" icon={<ShieldCheck size={16}/>} onEdit={() => setStep(3)}><Line label="Final payable" value={formatCurrency(payable)}/></Summary><div className="flex gap-2"><Back onClick={() => setStep(3)}/><button type="button" onClick={submitOrder} disabled={submitting || !quote} className="flex-[2] bg-black text-white py-3.5 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">{submitting ? <Loader2 size={18} className="animate-spin"/> : <ShieldCheck size={18}/>}<span>{submitting ? 'SUBMITTING...' : 'SUBMIT ORDER'}</span></button></div><p className="text-[10px] text-neutral-400 text-center">Server revalidates identity, stock, courier, pricing, promo eligibility and totals before order creation.</p></div>}
-    </main>
-  </div>;
+      if (selectedItems.length) removeSelectedItems();
+      else clearCart();
+
+      toast.success("Order submitted for review.");
+      navigate(`/shop/order-confirmation/${created.orderNumber}`, {
+        state: {
+          orderNumber: created.orderNumber,
+          queuePosition: created.queuePosition,
+          estimatedWaitingMinutes: created.estimatedWaitingMinutes,
+          estimatedDispatchTime: created.estimatedDispatchTime,
+          distanceKm: created.distanceKm,
+        },
+      });
+    } catch (error: any) {
+      console.error("Hardened checkout submission failed:", error);
+      toast.error(error?.message || "Unable to submit the order. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!checkoutItems.length) {
+    return <EmptyCheckout />;
+  }
+
+  return (
+    <div className="w-full min-h-screen bg-[#f3f4f6] pb-28">
+      {/* Top compact checkout header */}
+      <div className="bg-white border-b border-neutral-200 px-3.5 py-2.5 shadow-2xs">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => (step === 1 ? navigate("/shop/cart") : setStep((step - 1) as Step))}
+              className="p-1 text-neutral-700 hover:text-black rounded-lg hover:bg-neutral-100 transition"
+              aria-label="Back"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h1 className="text-base font-bold uppercase tracking-tight leading-none" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+                CHECKOUT
+              </h1>
+              <p className="text-[10px] text-neutral-500 mt-0.5">
+                Step {step} of 4 • {STEP_ITEMS[step - 1].label}
+              </p>
+            </div>
+          </div>
+
+          <div className="text-right">
+            <div className="text-[9px] text-neutral-400 uppercase font-semibold">Total Payable</div>
+            <div className="text-sm font-bold text-neutral-950 leading-tight">
+              {formatCurrency(payable)}
+            </div>
+          </div>
+        </div>
+
+        {/* Compact step indicators */}
+        <div className="mt-2.5 pt-2 border-t border-neutral-100 grid grid-cols-4 gap-1.5">
+          {STEP_ITEMS.map((item) => {
+            const isCurrent = step === item.id;
+            const isPassed = step > item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => goToStep(item.id)}
+                className={`py-1.5 px-1 rounded-lg text-[10px] uppercase font-semibold flex items-center justify-center gap-1 transition ${
+                  isCurrent
+                    ? "bg-neutral-900 text-white shadow-2xs"
+                    : isPassed
+                    ? "bg-neutral-100 text-neutral-800 hover:bg-neutral-200"
+                    : "bg-neutral-50 text-neutral-400"
+                }`}
+              >
+                {isPassed ? <Check size={10} className="stroke-[3]" /> : <span>{item.id}.</span>}
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Main Form Body */}
+      <div className="p-3 space-y-3">
+        {step === 1 && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              goNext();
+            }}
+            className="space-y-3"
+          >
+            <Card title="Receiver Information" icon={<User size={15} />}>
+              <Field label="Receiver Full Name" icon={<User size={11} />}>
+                <input
+                  value={receiver}
+                  onChange={(e) => setReceiver(e.target.value)}
+                  className="checkout-input"
+                  placeholder="Full name"
+                  required
+                />
+              </Field>
+              <Field label="Contact Phone Number" icon={<Phone size={11} />}>
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  type="tel"
+                  className="checkout-input"
+                  placeholder="09XX XXX XXXX"
+                  required
+                />
+              </Field>
+            </Card>
+
+            <Card title="Delivery Address" icon={<MapPin size={15} />}>
+              <GeoAddressAutocomplete
+                addressInput={addressInput}
+                onAddressChange={setAddressInput}
+                suggestions={suggestions}
+                isLoading={geoLoading}
+                isLocating={isLocating}
+                isOpen={geoOpen}
+                setIsOpen={setGeoOpen}
+                selectedLocation={selectedLocation}
+                onSelectSuggestion={selectSuggestion}
+                onDetectGps={detectCurrentLocation}
+                onDetectIp={detectIpLocation}
+                routeInfo={routeInfo}
+                isCalculatingRoute={isCalculatingRoute}
+                warehouseName={geoConfig?.warehouse.name}
+                hasGeoapifyKey={geoConfig?.hasApiKey}
+              />
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value.slice(0, 160))}
+                className="checkout-input resize-none mt-2 text-xs"
+                rows={2}
+                placeholder="Gate, unit, building landmark, or delivery notes (optional)"
+              />
+            </Card>
+
+            <div className="pt-1">
+              <PrimaryButton label="Continue to Delivery" />
+            </div>
+          </form>
+        )}
+
+        {step === 2 && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              goNext();
+            }}
+            className="space-y-3"
+          >
+            <Card title="Delivery Provider" icon={<Truck size={15} />}>
+              <p className="text-[11px] text-neutral-500 -mt-1">
+                Select your preferred courier service:
+              </p>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {couriers.map((courier) => {
+                  const isSelected = courier.id === courierId;
+                  const charge = calculateDeliveryCharge(courier, distanceKm);
+                  return (
+                    <button
+                      key={courier.id}
+                      type="button"
+                      disabled={!courier.isAvailable}
+                      onClick={() => setCourierId(courier.id)}
+                      className={`relative min-h-[88px] rounded-xl border p-2 flex flex-col items-center justify-center transition-all ${
+                        isSelected
+                          ? "bg-neutral-900 text-white border-black shadow-xs"
+                          : "bg-white border-neutral-200 hover:border-neutral-300"
+                      } ${courier.isAvailable ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
+                    >
+                      <img src={courier.logoUrl} alt={courier.name} className="w-8 h-8 object-contain mb-1" />
+                      <span className="text-[9.5px] font-semibold text-center leading-tight line-clamp-1">
+                        {courier.name}
+                      </span>
+                      <span className={`text-[10px] font-bold mt-1 ${isSelected ? "text-emerald-300" : "text-neutral-900"}`}>
+                        {charge ? formatCurrency(charge) : "FREE PROMO"}
+                      </span>
+                      {isSelected && (
+                        <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-2xs">
+                          <Check size={10} className="stroke-[3]" />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selectedCourier && routeInfo && (
+                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs flex items-center justify-between text-neutral-700">
+                  <span className="flex items-center gap-1.5 text-neutral-500">
+                    <MapPin size={13} /> Distance
+                  </span>
+                  <span className="font-semibold text-neutral-900">
+                    {distanceKm.toFixed(1)} km • ~{Math.ceil(routeInfo.durationMinutes)} mins transit
+                  </span>
+                </div>
+              )}
+
+              {/* Promo code field */}
+              <div className="p-2.5 rounded-xl bg-white border border-neutral-200">
+                <Field label="Promo Code (Optional)" icon={<Tag size={11} />}>
+                  <div className="flex gap-2 mt-1">
+                    <input
+                      value={promoCode}
+                      onChange={(e) => {
+                        setPromoCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 64));
+                        setQuote(null);
+                      }}
+                      className="checkout-input flex-1 py-1.5 text-xs font-mono uppercase"
+                      placeholder="ENTER PROMO CODE"
+                      autoCapitalize="characters"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!promoCode.trim()) toast.error("Enter a promo code first.");
+                        else setQuoteError(null);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-neutral-900 text-white text-xs font-semibold hover:bg-black transition"
+                    >
+                      APPLY
+                    </button>
+                  </div>
+                </Field>
+              </div>
+
+              {quoteLoading && (
+                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs flex items-center gap-2 text-neutral-600">
+                  <Loader2 size={14} className="animate-spin text-neutral-900" />
+                  Calculating secure delivery quote...
+                </div>
+              )}
+
+              {quoteError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-1.5">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>{quoteError}</span>
+                </div>
+              )}
+
+              {quote?.freeDelivery && (
+                <div className="p-2.5 rounded-xl bg-emerald-900 text-white border border-emerald-800 text-xs flex items-center justify-between">
+                  <span className="flex items-center gap-1 font-medium">
+                    <Check size={13} /> Authorized Promo
+                  </span>
+                  <span className="font-bold">FREE DELIVERY ({quote.promoCode})</span>
+                </div>
+              )}
+            </Card>
+
+            <Card title="Delivery Fee Payment" icon={<Truck size={15} />}>
+              <div className="grid grid-cols-2 gap-2">
+                {(["PAY_AT_CHECKOUT", "PAY_UPON_FULFILLMENT"] as DeliveryPaymentOption[]).map((value) => {
+                  const isSelected = deliveryPaymentOption === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setDeliveryPaymentOption(value)}
+                      className={`p-2.5 rounded-xl border text-left transition ${
+                        isSelected
+                          ? "bg-neutral-900 text-white border-black shadow-2xs"
+                          : "bg-white border-neutral-200 hover:border-neutral-300"
+                      }`}
+                    >
+                      <div className="text-xs font-bold uppercase tracking-tight">
+                        {value === "PAY_AT_CHECKOUT" ? "Pay at Checkout" : "Pay upon Fulfillment"}
+                      </div>
+                      <div className={`text-[10px] mt-0.5 leading-tight ${isSelected ? "text-neutral-300" : "text-neutral-500"}`}>
+                        {value === "PAY_AT_CHECKOUT" ? "Include fee now in total" : "Settle fee later with courier"}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <div className="flex gap-2 pt-1">
+              <Back onClick={() => setStep(1)} />
+              <PrimaryButton
+                label={quote && !quoteLoading ? "Review Order" : "Calculating Quote..."}
+                disabled={!quote || quoteLoading}
+              />
+            </div>
+          </form>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-3">
+            <Summary title="Receiver & Address" icon={<MapPin size={15} />} onEdit={() => setStep(1)}>
+              <p className="font-bold text-neutral-950">{receiver}</p>
+              <p className="text-neutral-600">{phone}</p>
+              <p className="text-neutral-700 leading-snug mt-0.5">{addressInput}</p>
+              {notes && <p className="italic text-neutral-500 text-[11px] mt-1">“{notes}”</p>}
+            </Summary>
+
+            <Summary title="Delivery Details" icon={<Truck size={15} />} onEdit={() => setStep(2)}>
+              <div className="flex justify-between items-center font-bold text-neutral-950">
+                <span>{quote?.courierName || selectedCourier?.name}</span>
+                <span className="text-emerald-700">
+                  {quote?.deliveryDueNow ? formatCurrency(quote.deliveryDueNow) : "FREE"}
+                </span>
+              </div>
+              <p className="text-neutral-600 text-[11px] mt-0.5">
+                {quote?.distanceKm?.toFixed(1)} km • {deliveryPaymentOption === "PAY_AT_CHECKOUT" ? "Paid at checkout" : "Pay upon fulfillment"}
+              </p>
+              {quote?.freeDelivery && (
+                <p className="font-semibold text-emerald-700 text-[11px]">Promo: {quote.promoCode}</p>
+              )}
+            </Summary>
+
+            <Card title="Order Items & Pricing" icon={<ShoppingBag size={15} />}>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                {checkoutItems.map((item) => (
+                  <div key={item.productId} className="flex justify-between text-xs text-neutral-800">
+                    <span className="truncate max-w-[70%]">
+                      {item.productName} <span className="text-neutral-400">×{item.quantity}</span>
+                    </span>
+                    <span className="font-semibold shrink-0">{formatCurrency(item.unitPrice * item.quantity)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-2 mt-1 border-t border-neutral-100 space-y-1 text-xs">
+                <Line label="Items Subtotal" value={formatCurrency(quote?.subtotal ?? subtotalNow)} />
+                {Boolean(quote?.charges) && <Line label="Service Charges" value={formatCurrency(quote?.charges ?? 0)} />}
+                <Line label="Tax (5%)" value={formatCurrency(quote?.tax ?? fallbackTax)} />
+                <Line
+                  label="Delivery Due Now"
+                  value={quote?.deliveryDueNow ? formatCurrency(quote.deliveryDueNow) : "FREE"}
+                />
+                <div className="pt-2 mt-1.5 border-t border-neutral-200 flex justify-between items-baseline font-bold">
+                  <span className="text-sm uppercase tracking-tight" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+                    Final Payable
+                  </span>
+                  <span className="text-base text-neutral-950">{formatCurrency(payable)}</span>
+                </div>
+              </div>
+            </Card>
+
+            <div className="flex gap-2 pt-1">
+              <Back onClick={() => setStep(2)} />
+              <PrimaryButton label="Continue to Payment" onClick={goNext} />
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="space-y-3">
+            <Card title="Payment Method" icon={<CreditCard size={15} />}>
+              <div className="grid grid-cols-2 gap-2">
+                <Pay
+                  selected={paymentMethod === "TELEGRAM_PAY"}
+                  onClick={() => setPaymentMethod("TELEGRAM_PAY")}
+                  title="Telegram Pay"
+                  desc="Direct secure Telegram invoice"
+                />
+                <Pay
+                  selected={paymentMethod === "DIRECT_TRANSFER"}
+                  onClick={() => setPaymentMethod("DIRECT_TRANSFER")}
+                  title="Bank / GCash / Maya"
+                  desc="Upload payment screenshot"
+                />
+              </div>
+
+              {paymentMethod === "DIRECT_TRANSFER" && (
+                <div className="mt-2.5 bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-[11px] space-y-2">
+                  <div className="font-bold uppercase flex items-center gap-1 text-neutral-900">
+                    <Building2 size={13} /> Beneficiary Account Details
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[9px] text-neutral-500 uppercase block font-semibold">GCASH / MAYA</span>
+                      <span className="font-bold text-neutral-900 text-xs">0919 123 1234</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-neutral-500 uppercase block font-semibold">ACCOUNT NAME</span>
+                      <span className="font-bold text-neutral-900 text-xs">PRIME ENTERPRISE PH</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-2">
+                <ReceiptOcrScanner
+                  expectedAmount={payable}
+                  expectedReceiver="PRIME ENTERPRISE PH"
+                  initialReceiptUrl={receiptUrl || undefined}
+                  initialOcrResult={ocrResult}
+                  title={`Proof of Payment ${paymentMethod === "DIRECT_TRANSFER" ? "(Required)" : "(Optional)"}`}
+                  onOcrComplete={(result, uri) => {
+                    setOcrResult(result);
+                    setReceiptUrl(uri);
+                  }}
+                  onRemoveReceipt={() => {
+                    setOcrResult(null);
+                    setReceiptUrl(null);
+                  }}
+                />
+              </div>
+            </Card>
+
+            <Summary title="Total Due" icon={<ShieldCheck size={15} />} onEdit={() => setStep(3)}>
+              <div className="flex justify-between items-baseline font-bold text-neutral-950">
+                <span className="text-xs uppercase">Amount to Settle</span>
+                <span className="text-base">{formatCurrency(payable)}</span>
+              </div>
+            </Summary>
+
+            <div className="flex gap-2 pt-1">
+              <Back onClick={() => setStep(3)} />
+              <button
+                type="button"
+                onClick={submitOrder}
+                disabled={submitting || !quote}
+                className="flex-[2] bg-neutral-950 text-white py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-bold text-sm shadow-md hover:bg-black transition disabled:opacity-50 cursor-pointer"
+              >
+                {submitting ? <Loader2 size={17} className="animate-spin" /> : <ShieldCheck size={17} />}
+                <span>{submitting ? "SUBMITTING ORDER..." : "PLACE ORDER"}</span>
+              </button>
+            </div>
+
+            <p className="text-[10px] text-neutral-500 text-center px-4 leading-normal">
+              Orders are validated with strict real-time stock, pricing, and courier checks before dispatch.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
-function EmptyCheckout(){return <div className="bg-[#f3f4f6] min-h-full p-6 text-center py-20"><ShoppingBag size={48} className="mx-auto mb-3 text-neutral-400"/><h2 className="text-xl uppercase" style={{fontFamily:"'Roboto Condensed',sans-serif"}}>No items selected for checkout</h2><p className="text-xs text-neutral-500 mt-1 mb-4">Select products in your cart before proceeding.</p><Link to="/shop/cart" className="inline-block bg-black text-white px-5 py-2.5 rounded-xl text-sm">Return to Cart</Link></div>}
-function Card({title,icon,children}:{title:string;icon:React.ReactNode;children:React.ReactNode}){return <section className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-xs space-y-3"><div className="flex items-center gap-2 text-sm uppercase pb-2 border-b border-neutral-100" style={{fontFamily:"'Roboto Condensed',sans-serif"}}>{icon}<span>{title}</span></div>{children}</section>}
-function Summary({title,icon,onEdit,children}:{title:string;icon:React.ReactNode;onEdit:()=>void;children:React.ReactNode}){return <Card title={title} icon={icon}><div className="flex justify-end -mt-8"><button type="button" onClick={onEdit} className="text-[10px] text-neutral-500 flex items-center gap-1"><Edit2 size={10}/>Edit</button></div><div className="text-xs space-y-1">{children}</div></Card>}
-function Line({label,value}:{label:string;value:string}){return <div className="flex justify-between text-xs"><span>{label}</span><span className="font-semibold">{value}</span></div>}
-function Field({label,children}:{label:string;children:React.ReactNode}){return <label className="block"><span className="text-[11px] text-neutral-600 uppercase">{label}</span><div className="mt-1">{children}</div></label>}
-function Pay({selected,onClick,title,desc}:{selected:boolean;onClick:()=>void;title:string;desc:string}){return <button type="button" onClick={onClick} className={`p-3 rounded-xl border text-left ${selected?'bg-neutral-900 text-white border-black':'bg-white border-neutral-200'}`}><div className="text-xs font-semibold uppercase">{title}</div><div className="text-[10px] opacity-70 mt-1">{desc}</div></button>}
-function Back({onClick}:{onClick:()=>void}){return <button type="button" onClick={onClick} className="flex-1 bg-white border border-neutral-200 py-3.5 rounded-xl flex items-center justify-center gap-1"><ArrowLeft size={16}/>Back</button>}
-function PrimaryButton({label,disabled=false,onClick}:{label:string;disabled?:boolean;onClick?:()=>void}){return <button type={onClick ? 'button' : 'submit'} onClick={onClick} disabled={disabled} className="flex-[2] bg-black text-white py-3.5 rounded-xl flex items-center justify-center gap-2 disabled:opacity-40">{label}<ArrowRight size={17}/></button>}
+
+function EmptyCheckout() {
+  return (
+    <div className="w-full min-h-[60vh] flex flex-col items-center justify-center p-6 text-center">
+      <div className="w-14 h-14 bg-neutral-200 rounded-full flex items-center justify-center mb-3">
+        <ShoppingBag size={24} className="text-neutral-500" />
+      </div>
+      <h2 className="text-lg font-bold uppercase text-neutral-900" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+        No items selected for checkout
+      </h2>
+      <p className="text-xs text-neutral-500 mt-1 mb-4">
+        Add or select items in your cart to proceed with order placement.
+      </p>
+      <Link
+        to="/shop/cart"
+        className="inline-flex items-center gap-2 bg-neutral-950 text-white px-5 py-2.5 rounded-xl text-xs font-semibold hover:bg-black transition"
+      >
+        <ArrowLeft size={14} /> Return to Cart
+      </Link>
+    </div>
+  );
+}
+
+function Card({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="bg-white rounded-xl border border-neutral-200/90 p-3.5 shadow-2xs space-y-2.5">
+      <div className="flex items-center gap-1.5 text-xs font-bold uppercase text-neutral-900 pb-1.5 border-b border-neutral-100" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+        {icon}
+        <span>{title}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Summary({
+  title,
+  icon,
+  onEdit,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  onEdit: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="bg-white rounded-xl border border-neutral-200/90 p-3.5 shadow-2xs text-xs text-neutral-700 relative">
+      <div className="flex items-center justify-between pb-1.5 border-b border-neutral-100 mb-2">
+        <div className="flex items-center gap-1.5 text-xs font-bold uppercase text-neutral-900" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+          {icon}
+          <span>{title}</span>
+        </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="text-[10px] font-semibold text-neutral-600 hover:text-black flex items-center gap-1 cursor-pointer"
+        >
+          <Edit2 size={10} /> Edit
+        </button>
+      </div>
+      <div className="space-y-0.5">{children}</div>
+    </section>
+  );
+}
+
+function Line({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between text-neutral-600">
+      <span>{label}</span>
+      <span className="font-semibold text-neutral-900">{value}</span>
+    </div>
+  );
+}
+
+function Field({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="text-[10.5px] font-semibold text-neutral-600 uppercase flex items-center gap-1 mb-1">
+        {icon}
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function Pay({
+  selected,
+  onClick,
+  title,
+  desc,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`p-2.5 rounded-xl border text-left transition relative cursor-pointer ${
+        selected ? "bg-neutral-900 text-white border-black shadow-2xs" : "bg-white border-neutral-200 hover:border-neutral-300"
+      }`}
+    >
+      {selected && (
+        <span className="absolute top-2 right-2 w-3.5 h-3.5 bg-emerald-500 text-white rounded-full flex items-center justify-center">
+          <Check size={8} className="stroke-[3]" />
+        </span>
+      )}
+      <div className="text-xs font-bold uppercase tracking-tight">{title}</div>
+      <div className={`text-[10px] mt-0.5 leading-tight ${selected ? "text-neutral-300" : "text-neutral-500"}`}>{desc}</div>
+    </button>
+  );
+}
+
+function Back({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex-1 bg-white border border-neutral-200 text-neutral-700 py-3 px-3 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold hover:bg-neutral-50 transition cursor-pointer"
+    >
+      <ArrowLeft size={14} /> Back
+    </button>
+  );
+}
+
+function PrimaryButton({
+  label,
+  disabled = false,
+  onClick,
+}: {
+  label: string;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type={onClick ? "button" : "submit"}
+      onClick={onClick}
+      disabled={disabled}
+      className="flex-[2] bg-neutral-950 text-white py-3 px-4 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold shadow-md hover:bg-black transition disabled:opacity-40 cursor-pointer"
+    >
+      <span>{label}</span>
+      <ArrowRight size={14} />
+    </button>
+  );
+}

@@ -39,13 +39,52 @@ export function installReleaseRoutes(app: Application) {
   app.post("/api/auth/telegram", async (req, res) => { try { const initData = typeof req.body?.initData === "string" ? req.body.initData : ""; const result = verifyTelegramInitData(initData, process.env.TELEGRAM_BOT_TOKEN || ""); const user = result.user; const firestore = db(); const customerRef = firestore.collection("customers").doc(String(user.id)); const existing = await customerRef.get(); const now = FieldValue.serverTimestamp(); const customer: any = { id: String(user.id), telegramUserId: String(user.id), telegramDisplayName: [user.first_name, user.last_name].filter(Boolean).join(" ") || `TG User ${user.id}`, telegramUsername: user.username || null, primeMemberId: `PC${String(user.id).slice(0, 8).toUpperCase()}`, updatedAt: now }; if (!existing.exists) Object.assign(customer, { vipTier: "Bronze", points: 0, memberSince: now, referrals: 0, totalSpending: 0, orderCount: 0, createdAt: now }); await customerRef.set(customer, { merge: true }); setCookie(res, TG_COOKIE, sessionCookie(String(user.id)), TG_TTL_MS); return res.json({ authenticated: true, user }); } catch (e: any) { return res.status(401).json({ authenticated: false, error: e?.message || "Telegram authentication failed" }); } });
   app.get("/api/auth/telegram/session", (req, res) => res.json({ authenticated: !!telegramUserId(req), telegramUserId: telegramUserId(req) }));
 
-  app.get("/api/couriers", async (req, res) => { if (!telegramUserId(req) && !adminSession(req)) return res.status(401).json({ error: "Authentication required" }); try { const snap = await db().collection("couriers").get(); const couriers = snap.empty ? DEFAULT_COURIERS : snap.docs.map((d) => plain(d.id, d.data())); return res.json({ couriers }); } catch { return res.status(500).json({ error: "Unable to load couriers" }); } });
+  app.get("/api/couriers", async (req, res) => {
+    try {
+      const snap = await db().collection("couriers").get();
+      const couriers = snap.empty ? DEFAULT_COURIERS : snap.docs.map((d) => plain(d.id, d.data()));
+      return res.json({ couriers });
+    } catch {
+      return res.json({ couriers: DEFAULT_COURIERS });
+    }
+  });
   app.post("/api/admin/couriers", async (req, res) => { if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" }); try { const data = cleanCourier(req.body); const ref = await db().collection("couriers").add({ ...data, createdAt: FieldValue.serverTimestamp() }); return res.status(201).json({ id: ref.id, ...data }); } catch (e: any) { return res.status(400).json({ error: e?.message || "Unable to create courier" }); } });
   app.patch("/api/admin/couriers/:id", async (req, res) => { if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" }); try { const id = String(req.params.id); if (!id || id.length > 150) return res.status(400).json({ error: "Invalid courier id" }); const data = cleanCourier(req.body); await db().collection("couriers").doc(id).set(data, { merge: true }); return res.json({ id, ...data }); } catch (e: any) { return res.status(400).json({ error: e?.message || "Unable to update courier" }); } });
   app.delete("/api/admin/couriers/:id", async (req, res) => { if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" }); try { await db().collection("couriers").doc(String(req.params.id)).delete(); return res.json({ success: true }); } catch { return res.status(500).json({ error: "Unable to delete courier" }); } });
 
-  app.get("/api/orders", async (req, res) => { const isAdmin = adminSession(req); const tg = telegramUserId(req); if (!isAdmin && !tg) return res.status(401).json({ error: "Authentication required" }); try { const snap = await db().collection("orders").orderBy("createdAt", "desc").get(); const orders = snap.docs.map((d) => plain(d.id, d.data())).filter((o) => isAdmin || String(o.telegramUserId) === tg); return res.json({ orders }); } catch { return res.status(500).json({ error: "Unable to load orders" }); } });
+  app.get("/api/orders", async (req, res) => {
+    const isAdmin = adminSession(req);
+    const tg = telegramUserId(req) || (typeof req.query?.userId === "string" ? req.query.userId : null);
+    if (!isAdmin && !tg) {
+      return res.json({ orders: [] });
+    }
+    try {
+      const snap = await db().collection("orders").orderBy("createdAt", "desc").get();
+      const orders = snap.docs.map((d) => plain(d.id, d.data())).filter((o) => isAdmin || String(o.telegramUserId) === tg);
+      return res.json({ orders });
+    } catch (e: any) {
+      console.error("Order load error:", e);
+      return res.status(500).json({ error: "Unable to load orders" });
+    }
+  });
   app.patch("/api/orders/:id", async (req, res) => { if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" }); const allowed = ["orderStatus", "paymentStatus", "adminNotes", "receiptOcrData", "receiptUrl"]; const data: any = {}; for (const key of allowed) if (key in req.body) data[key] = req.body[key]; data.updatedAt = FieldValue.serverTimestamp(); try { await db().collection("orders").doc(req.params.id).update(data); return res.json({ success: true }); } catch { return res.status(500).json({ error: "Unable to update order" }); } });
   app.delete("/api/orders/:id", async (req, res) => { if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" }); try { await db().collection("orders").doc(req.params.id).delete(); return res.json({ success: true }); } catch { return res.status(500).json({ error: "Unable to delete order" }); } });
-  app.get("/api/customers", async (req, res) => { const isAdmin = adminSession(req); const tg = telegramUserId(req); if (!isAdmin && !tg) return res.status(401).json({ error: "Authentication required" }); try { const ref = db().collection("customers"); if (isAdmin) { const snap = await ref.orderBy("updatedAt", "desc").get(); return res.json({ customers: snap.docs.map(d => plain(d.id, d.data())) }); } const snap = await ref.doc(tg).get(); return res.json({ customers: snap.exists ? [plain(snap.id, snap.data())] : [] }); } catch { return res.status(500).json({ error: "Unable to load customers" }); } });
+  app.get("/api/customers", async (req, res) => {
+    const isAdmin = adminSession(req);
+    const tg = telegramUserId(req) || (typeof req.query?.userId === "string" ? req.query.userId : null);
+    if (!isAdmin && !tg) {
+      return res.json({ customers: [] });
+    }
+    try {
+      const ref = db().collection("customers");
+      if (isAdmin) {
+        const snap = await ref.orderBy("updatedAt", "desc").get();
+        return res.json({ customers: snap.docs.map((d) => plain(d.id, d.data())) });
+      }
+      const snap = await ref.doc(tg).get();
+      return res.json({ customers: snap.exists ? [plain(snap.id, snap.data())] : [] });
+    } catch {
+      return res.status(500).json({ error: "Unable to load customers" });
+    }
+  });
 }

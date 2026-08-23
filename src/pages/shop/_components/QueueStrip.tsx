@@ -51,139 +51,107 @@ export default function QueueStrip() {
   }
 
   return (
-    <div className="bg-white w-full overflow-hidden shadow-[0_2px_4px_-1px_rgba(0,0,0,0.05)]">
-      <div className="flex items-stretch">
+    <div className="bg-white w-full overflow-hidden border-b border-neutral-100 shadow-2xs">
+      <div className="flex items-stretch max-w-lg mx-auto">
         {/* Column 1: ON QUEUE */}
-        <div className="flex-1 py-1 px-1 text-center bg-white flex flex-col justify-center items-center min-w-0 relative" style={{ height: "45px" }}>
+        <div className="flex-1 py-0.5 px-0.5 text-center bg-white flex flex-col justify-center items-center min-w-0 relative h-8">
           <div
-            className="text-neutral-700 font-normal uppercase leading-none truncate w-full"
+            className="text-neutral-500 font-normal uppercase leading-none truncate w-full text-[9px]"
             style={{
               fontFamily: "'Roboto Condensed', sans-serif",
-              fontSize: "10.5px",
-              fontWeight: "normal",
-              letterSpacing: "0.4px",
             }}
           >
             ON QUEUE
           </div>
           <div
-            className="font-normal mt-0.5 uppercase whitespace-nowrap leading-none"
+            className="font-semibold uppercase whitespace-nowrap leading-none mt-0.5 text-[11px] text-blue-600"
             style={{
               fontFamily: "'Roboto Condensed', sans-serif",
-              fontSize: "13.5px",
-              fontWeight: "normal",
-              color: "#1d4ed8",
             }}
           >
             {onQueue}
           </div>
-          <div className="absolute right-0 top-2 bottom-2 w-[1px] bg-gradient-to-b from-transparent via-neutral-300 to-transparent"></div>
+          <div className="absolute right-0 top-1.5 bottom-1.5 w-[1px] bg-neutral-200"></div>
         </div>
 
         {/* Column 2: PROCESSING */}
-        <div className="flex-[1.4] py-1 px-1 text-center bg-white flex flex-col justify-center items-center min-w-0 relative" style={{ height: "45px" }}>
+        <div className="flex-[1.2] py-0.5 px-0.5 text-center bg-white flex flex-col justify-center items-center min-w-0 relative h-8">
           <div
-            className="text-neutral-700 font-normal uppercase leading-none truncate w-full"
+            className="text-neutral-500 font-normal uppercase leading-none truncate w-full text-[9px]"
             style={{
               fontFamily: "'Roboto Condensed', sans-serif",
-              fontSize: "10.5px",
-              fontWeight: "normal",
-              letterSpacing: "0.4px",
             }}
           >
             PROCESSING
           </div>
           <div
-            className="font-normal mt-0.5 uppercase whitespace-nowrap leading-none"
+            className="font-semibold uppercase whitespace-nowrap leading-none mt-0.5 text-[11px] text-emerald-600"
             style={{
               fontFamily: "'Roboto Condensed', sans-serif",
-              fontSize: "13.5px",
-              fontWeight: "normal",
-              color: "#16a34a",
             }}
           >
             {processing}
           </div>
-          <div className="absolute right-0 top-2 bottom-2 w-[1px] bg-gradient-to-b from-transparent via-neutral-300 to-transparent"></div>
+          <div className="absolute right-0 top-1.5 bottom-1.5 w-[1px] bg-neutral-200"></div>
         </div>
 
         {/* Column 3: WAIT */}
-        <div className="flex-[1.3] py-1 px-1 text-center bg-white flex flex-col justify-center items-center min-w-0 relative" style={{ height: "45px" }}>
+        <div className="flex-[1.1] py-0.5 px-0.5 text-center bg-white flex flex-col justify-center items-center min-w-0 relative h-8">
           <div
-            className="text-neutral-700 font-normal uppercase leading-none truncate w-full"
+            className="text-neutral-500 font-normal uppercase leading-none truncate w-full text-[9px]"
             style={{
               fontFamily: "'Roboto Condensed', sans-serif",
-              fontSize: "10.5px",
-              fontWeight: "normal",
-              letterSpacing: "0.4px",
             }}
           >
             WAIT
           </div>
           <div
-            className="font-normal mt-0.5 uppercase whitespace-nowrap leading-none"
+            className="font-semibold uppercase whitespace-nowrap leading-none mt-0.5 text-[11px] text-rose-600"
             style={{
               fontFamily: "'Roboto Condensed', sans-serif",
-              fontSize: "13.5px",
-              fontWeight: "normal",
-              color: "#dc2626",
-              letterSpacing: "0.2px",
             }}
           >
-            {waitTime} MIN
+            {waitTime}M
           </div>
-          <div className="absolute right-0 top-2 bottom-2 w-[1px] bg-gradient-to-b from-transparent via-neutral-300 to-transparent"></div>
+          <div className="absolute right-0 top-1.5 bottom-1.5 w-[1px] bg-neutral-200"></div>
         </div>
 
         {/* Column 4: DISPATCH */}
-        <div className="flex-[1.3] py-1 px-1 text-center bg-white flex flex-col justify-center items-center min-w-0 relative" style={{ height: "45px" }}>
+        <div className="flex-[1.1] py-0.5 px-0.5 text-center bg-white flex flex-col justify-center items-center min-w-0 relative h-8">
           <div
-            className="text-neutral-700 font-normal uppercase leading-none truncate w-full"
+            className="text-neutral-500 font-normal uppercase leading-none truncate w-full text-[9px]"
             style={{
               fontFamily: "'Roboto Condensed', sans-serif",
-              fontSize: "10.5px",
-              fontWeight: "normal",
-              letterSpacing: "0.4px",
             }}
           >
             DISPATCH
           </div>
           <div
-            className="font-normal mt-0.5 uppercase whitespace-nowrap leading-none"
+            className="font-semibold uppercase whitespace-nowrap leading-none mt-0.5 text-[11px] text-rose-600"
             style={{
               fontFamily: "'Roboto Condensed', sans-serif",
-              fontSize: "13.5px",
-              fontWeight: "normal",
-              color: "#dc2626",
-              letterSpacing: "0.2px",
             }}
           >
-            {dispatchTime} MIN
+            {dispatchTime}M
           </div>
-          <div className="absolute right-0 top-2 bottom-2 w-[1px] bg-gradient-to-b from-transparent via-neutral-300 to-transparent"></div>
+          <div className="absolute right-0 top-1.5 bottom-1.5 w-[1px] bg-neutral-200"></div>
         </div>
 
         {/* Column 5: FLOW */}
-        <div className="flex-[1.4] py-1 px-1 text-center bg-white flex flex-col justify-center items-center min-w-0" style={{ height: "45px" }}>
+        <div className="flex-[1.2] py-0.5 px-0.5 text-center bg-white flex flex-col justify-center items-center min-w-0 h-8">
           <div
-            className="text-neutral-700 font-normal uppercase leading-none truncate w-full"
+            className="text-neutral-500 font-normal uppercase leading-none truncate w-full text-[9px]"
             style={{
               fontFamily: "'Roboto Condensed', sans-serif",
-              fontSize: "10.5px",
-              fontWeight: "normal",
-              letterSpacing: "0.4px",
             }}
           >
             FLOW
           </div>
           <div
-            className="font-normal mt-0.5 uppercase whitespace-nowrap leading-none"
+            className="font-semibold uppercase whitespace-nowrap leading-none mt-0.5 text-[11px]"
             style={{
               fontFamily: "'Roboto Condensed', sans-serif",
-              fontSize: "13.5px",
-              fontWeight: "normal",
               color: trafficColor,
-              letterSpacing: "0.2px",
             }}
           >
             {traffic}
