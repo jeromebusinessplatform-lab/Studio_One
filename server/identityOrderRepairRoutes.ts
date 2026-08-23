@@ -67,9 +67,15 @@ async function ensureMigrationNotification(telegramId: string, mid: string) {
 
 async function hydrateCustomerOrders(telegramId: string, customer: any, rawOrders: any[]) {
   const currentMid = asId(customer?.primeMemberId).toUpperCase();
+  const username = asId(customer?.telegramUsername).replace(/^@/, "").toLowerCase();
+  const displayName = asId(customer?.telegramDisplayName).toLowerCase();
   const matches = rawOrders.filter((order: any) => {
     const ids = [order.telegramUserId, order.userId, order.customerId, order.customerTelegramUserId].map(asId).filter(Boolean);
     if (ids.includes(telegramId)) return true;
+    const orderUsername = asId(order.telegramUsername).replace(/^@/, "").toLowerCase();
+    const orderDisplayName = asId(order.telegramDisplayName).toLowerCase();
+    if (username && orderUsername && username === orderUsername) return true;
+    if (displayName && orderDisplayName && displayName === orderDisplayName) return true;
     const mids = [order.primeMemberId, order.customerPrimeMemberId, order.memberId].map((v) => asId(v).toUpperCase()).filter(Boolean);
     return !!currentMid && mids.includes(currentMid);
   });
@@ -92,7 +98,6 @@ async function hydrateCustomerOrders(telegramId: string, customer: any, rawOrder
 }
 
 export function installIdentityOrderRepairRoutes(app: Application) {
-  // Must be installed before the legacy release routes. This route prevents Telegram auth from rewriting a migrated MID.
   app.post("/api/auth/telegram", async (req, res) => {
     try {
       const initData = typeof req.body?.initData === "string" ? req.body.initData : "";
@@ -116,9 +121,7 @@ export function installIdentityOrderRepairRoutes(app: Application) {
         primeMemberId,
         updatedAt: now,
       };
-      if (!existing) {
-        Object.assign(customer, { vipTier: "Bronze", points: 0, pointsBalance: 0, memberSince: now, referrals: 0, totalSpending: 0, totalDiscounts: 0, orderCount: 0, createdAt: now });
-      }
+      if (!existing) Object.assign(customer, { vipTier: "Bronze", points: 0, pointsBalance: 0, memberSince: now, referrals: 0, totalSpending: 0, totalDiscounts: 0, orderCount: 0, createdAt: now });
       await firestoreService.setDocument("customers", id, customer, true);
       if (existing && changed) await ensureMigrationNotification(id, primeMemberId);
       setTelegramSession(res, id);
@@ -128,7 +131,6 @@ export function installIdentityOrderRepairRoutes(app: Application) {
     }
   });
 
-  // Return a server-hydrated customer record and repair legacy orders that were created without customer identity.
   app.get("/api/customers", async (req, res, next) => {
     if (isAdmin(req)) return next();
     const tg = telegramUserId(req);
@@ -146,7 +148,6 @@ export function installIdentityOrderRepairRoutes(app: Application) {
     }
   });
 
-  // Server-authoritative order history. It hydrates older orders using Telegram/customer/MID identity fields.
   app.get("/api/orders", async (req, res, next) => {
     if (isAdmin(req)) return next();
     const tg = telegramUserId(req);
@@ -165,7 +166,6 @@ export function installIdentityOrderRepairRoutes(app: Application) {
     }
   });
 
-  // Repair the identity/statistics immediately after the existing order handler responds.
   app.post("/api/orders", (req, res, next) => {
     const originalJson = res.json.bind(res);
     res.json = ((payload: any) => {
