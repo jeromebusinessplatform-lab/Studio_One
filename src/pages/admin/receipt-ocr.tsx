@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Sparkles,
   FileSearch,
@@ -15,6 +16,7 @@ import {
   Info,
   Terminal,
   ExternalLink,
+  ArrowLeft,
 } from "lucide-react";
 import { ReceiptOcrScanner } from "@/components/ReceiptOcrScanner.tsx";
 import { SAMPLE_RECEIPTS, type SampleReceipt, analyzeReceiptImage } from "@/lib/ocr.ts";
@@ -23,6 +25,7 @@ import { formatCurrency } from "@/lib/utils.ts";
 import { toast } from "sonner";
 
 export default function AdminReceiptOcrPage() {
+  const navigate = useNavigate();
   const [ocrStatus, setOcrStatus] = useState<{
     enabled: boolean;
     model: string;
@@ -79,31 +82,40 @@ export default function AdminReceiptOcrPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-6xl">
+    <div className="p-3 sm:p-5 space-y-4 max-w-6xl mx-auto bg-white text-black min-h-screen">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1
-              className="text-black text-2xl font-normal tracking-wide uppercase"
-              style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
-            >
-              Receipt OCR Intelligence
-            </h1>
-            <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 border border-amber-300">
-              <Sparkles size={11} /> Gemini 3.7 Flash
-            </span>
-          </div>
-          <p
-            className="text-neutral-500 text-xs mt-0.5 font-normal"
-            style={{ fontFamily: "'Ubuntu', sans-serif" }}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-neutral-200 pb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate("/admin")}
+            className="p-1 text-neutral-500 hover:text-black rounded"
           >
-            Autonomous extraction of transaction references, amounts, and recipient verification for Philippine e-wallets & banks.
-          </p>
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1
+                className="text-black text-xl font-bold tracking-tight uppercase"
+                style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+              >
+                RECEIPT OCR INTELLIGENCE
+              </h1>
+              <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 border border-amber-300">
+                <Sparkles size={11} /> Gemini Flash
+              </span>
+            </div>
+            <p
+              className="text-neutral-500 text-xs font-normal"
+              style={{ fontFamily: "'Ubuntu', sans-serif" }}
+            >
+              Extraction of GCash, Maya, and bank payment slips
+            </p>
+          </div>
         </div>
 
         {/* System Status Pill */}
-        <div className="flex items-center gap-2 text-xs font-mono bg-white border border-neutral-200 rounded-xl px-3 py-1.5 shadow-2xs">
+        <div className="flex items-center gap-2 text-xs font-mono bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-1.5 shadow-2xs">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-neutral-600 font-normal">Engine:</span>
           <span className="font-bold text-black">{ocrStatus?.model || "gemini-3.7-flash"}</span>

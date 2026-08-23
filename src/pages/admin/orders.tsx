@@ -1,5 +1,6 @@
 import { OrderListSkeleton } from "@/components/admin/OrderSkeleton.tsx";
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Package,
@@ -21,6 +22,7 @@ import {
   TrendingUp,
   ChevronDown,
   ChevronUp,
+  ArrowLeft,
 } from "lucide-react";
 import { useOrders, type CustomerOrder, type OrderStatus } from "@/hooks/useOrders.ts";
 import { ReceiptOcrScanner } from "@/components/ReceiptOcrScanner.tsx";
@@ -65,6 +67,7 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
 };
 
 export default function AdminOrdersPage() {
+  const navigate = useNavigate();
   const { allOrders: orders, updateOrderStatus, updateOrderOcr, updateOrderPaymentStatus, deleteOrder, loading } = useOrders();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -151,21 +154,30 @@ export default function AdminOrdersPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1
-            className="text-black text-2xl font-normal tracking-wide uppercase"
-            style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+    <div className="p-3 sm:p-5 space-y-4 bg-white text-black min-h-screen">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-neutral-200 pb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate("/admin")}
+            className="p-1 text-neutral-500 hover:text-black rounded"
           >
-            Orders Management
-          </h1>
-          <p className="text-neutral-500 text-xs mt-0.5 font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-            Real-time customer orders, payment approvals, and courier dispatches.
-          </p>
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1
+              className="text-black text-xl font-bold uppercase tracking-tight"
+              style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+            >
+              ORDERS & DISPATCH FULFILLMENT
+            </h1>
+            <p className="text-neutral-500 text-xs font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
+              Real-time customer orders, payment approvals, and courier dispatches.
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowSalesAnalytics((prev) => !prev)}
             className="flex items-center gap-1.5 bg-black hover:bg-neutral-800 text-white text-xs px-3 py-2 rounded-xl transition cursor-pointer font-normal shadow-2xs"

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useProducts } from "@/hooks/useProducts.ts";
 import { ProductListSkeleton } from "@/components/admin/ProductListSkeleton.tsx";
 import {
@@ -18,6 +19,7 @@ import {
   Percent,
   DollarSign,
   TrendingUp,
+  ArrowLeft,
 } from "lucide-react";
 import { type Product, type BundleItemConfig, isBadgeActive } from "@/data/products.ts";
 import { toast } from "sonner";
@@ -28,6 +30,7 @@ import { ProductBundleManager } from "@/components/admin/ProductBundleManager.ts
 import { ProductBadgeSelector } from "@/components/admin/ProductBadgeSelector.tsx";
 
 export default function AdminProductsPage() {
+  const navigate = useNavigate();
   const {
     products,
     categories,
@@ -187,22 +190,31 @@ export default function AdminProductsPage() {
   }, [products, activeCategoryFilter]);
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-3 sm:p-5 space-y-4 bg-white text-black min-h-screen">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1
-            className="text-black text-2xl font-normal tracking-wide uppercase"
-            style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-200 pb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate("/admin")}
+            className="p-1 text-neutral-500 hover:text-black rounded"
           >
-            Product Catalog & Bundle Management
-          </h1>
-          <p
-            className="text-neutral-500 text-xs mt-0.5 font-normal"
-            style={{ fontFamily: "'Ubuntu', sans-serif" }}
-          >
-            Manage inventory, dynamic promotional badges with custom expiry dates, categories, and suggested bundle combinations.
-          </p>
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1
+              className="text-black text-xl font-bold tracking-tight uppercase"
+              style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+            >
+              INVENTORY & BUNDLE MANAGEMENT
+            </h1>
+            <p
+              className="text-neutral-500 text-xs font-normal"
+              style={{ fontFamily: "'Ubuntu', sans-serif" }}
+            >
+              Stock levels, pricing, promotional badges and product catalog
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

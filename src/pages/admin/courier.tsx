@@ -1,147 +1,311 @@
-import React, { useState, useCallback } from 'react';
-import { useCouriers } from '@/hooks/useCouriers';
-import { storage } from '@/lib/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import Cropper, { Area } from 'react-easy-crop';
-import { CourierListSkeleton } from '@/components/admin/CourierListSkeleton.tsx';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useCouriers, type Courier } from "@/hooks/useCouriers";
+import {
+  Truck,
+  Plus,
+  Trash2,
+  ArrowLeft,
+  CheckCircle2,
+  AlertCircle,
+  MapPin,
+  Clock,
+  ShieldCheck,
+  Phone,
+  Bike,
+} from "lucide-react";
+import { CourierListSkeleton } from "@/components/admin/CourierListSkeleton.tsx";
+import { formatCurrency } from "@/lib/utils.ts";
+import { toast } from "sonner";
+
+const COURIER_PRESETS = [
+  {
+    name: "PRIME In-House Express",
+    baseFare: 60,
+    baseDistanceKm: 4,
+    perKmCharge: 12,
+    platformFeeEnabled: false,
+    platformFee: 0,
+    nightDifferentialEnabled: true,
+    nightDifferentialFee: 30,
+    surchargeEnabled: false,
+    surchargeFee: 0,
+    logoUrl: "/primelogo.png",
+  },
+  {
+    name: "Lalamove 2-Wheel",
+    baseFare: 70,
+    baseDistanceKm: 3,
+    perKmCharge: 15,
+    platformFeeEnabled: true,
+    platformFee: 10,
+    nightDifferentialEnabled: true,
+    nightDifferentialFee: 40,
+    surchargeEnabled: true,
+    surchargeFee: 20,
+    logoUrl: "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=120&auto=format&fit=crop&q=80",
+  },
+  {
+    name: "GrabExpress Flash",
+    baseFare: 80,
+    baseDistanceKm: 5,
+    perKmCharge: 18,
+    platformFeeEnabled: true,
+    platformFee: 15,
+    nightDifferentialEnabled: false,
+    nightDifferentialFee: 0,
+    surchargeEnabled: false,
+    surchargeFee: 0,
+    logoUrl: "https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=120&auto=format&fit=crop&q=80",
+  },
+];
 
 export default function CourierPage() {
+  const navigate = useNavigate();
   const { couriers, loading, updateCourier, addCourier, removeCourier } = useCouriers();
+  const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
-    name: '',
-    baseFare: 0,
+    name: "",
+    baseFare: 60,
     baseDistanceKm: 4,
-    perKmCharge: 0,
+    perKmCharge: 12,
     platformFeeEnabled: false,
     platformFee: 0,
     nightDifferentialEnabled: false,
     nightDifferentialFee: 0,
     surchargeEnabled: false,
     surchargeFee: 0,
+    logoUrl: "",
   });
-  const [file, setFile] = useState<File | null>(null);
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
 
-  const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
-    setCroppedAreaPixels(croppedAreaPixels);
-  }, []);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const reader = new FileReader();
-      reader.onload = () => setImageSrc(reader.result as string);
-      reader.readAsDataURL(e.target.files[0]);
-      setFile(e.target.files[0]);
-    }
-  };
-
-  const getCroppedImg = async (imageSrc: string, pixelCrop: Area): Promise<Blob> => {
-    const image = new Image();
-    image.src = imageSrc;
-    await new Promise(resolve => image.onload = resolve);
-    const canvas = document.createElement('canvas');
-    canvas.width = pixelCrop.width;
-    canvas.height = pixelCrop.height;
-    const ctx = canvas.getContext('2d');
-    ctx?.drawImage(
-        image,
-        pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height,
-        0, 0, pixelCrop.width, pixelCrop.height
-    );
-    return new Promise(resolve => canvas.toBlob(blob => resolve(blob!), 'image/jpeg'));
-  };
-
-  const handleAddCourier = async () => {
-    if (Object.values(formData).some(val => typeof val === 'number' && val < 0)) {
-        alert("All price/fare fields must be positive numbers.");
-        return;
-    }
-    if (!file || !croppedAreaPixels || !imageSrc) return;
-
-    const croppedBlob = await getCroppedImg(imageSrc, croppedAreaPixels);
-    const storageRef = ref(storage, `couriers/${file.name}`);
-    await uploadBytes(storageRef, croppedBlob);
-    const logoUrl = await getDownloadURL(storageRef);
-    
-    await addCourier({
-      ...formData,
-      logoUrl,
-      isAvailable: true,
+  const handleApplyPreset = (preset: (typeof COURIER_PRESETS)[0]) => {
+    setFormData({
+      ...preset,
     });
-    setFormData({ name: '', baseFare: 0, baseDistanceKm: 4, perKmCharge: 0, platformFeeEnabled: false, platformFee: 0, nightDifferentialEnabled: false, nightDifferentialFee: 0, surchargeEnabled: false, surchargeFee: 0 });
-    setFile(null);
-    setImageSrc(null);
+    toast.success(`Loaded preset: ${preset.name}`);
+  };
+
+  const handleAddCourier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim()) {
+      toast.error("Please enter courier name.");
+      return;
+    }
+
+    try {
+      await addCourier({
+        ...formData,
+        logoUrl:
+          formData.logoUrl ||
+          "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=120&auto=format&fit=crop&q=80",
+        isAvailable: true,
+      });
+      setShowAddForm(false);
+      setFormData({
+        name: "",
+        baseFare: 60,
+        baseDistanceKm: 4,
+        perKmCharge: 12,
+        platformFeeEnabled: false,
+        platformFee: 0,
+        nightDifferentialEnabled: false,
+        nightDifferentialFee: 0,
+        surchargeEnabled: false,
+        surchargeFee: 0,
+        logoUrl: "",
+      });
+      toast.success("Courier fleet profile created.");
+    } catch {
+      toast.error("Failed to create courier.");
+    }
   };
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold mb-6">Courier Configuration</h1>
-      <div className="bg-white p-4 rounded-xl shadow mb-6">
-        <h2 className="text-lg font-medium mb-4">Add New Courier</h2>
-        <div className="grid grid-cols-2 gap-4">
-            <input type="text" placeholder="Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="border p-2 rounded col-span-2" />
-            <input type="number" placeholder="Base Fare" value={formData.baseFare} onChange={e => setFormData({...formData, baseFare: Number(e.target.value)})} className="border p-2 rounded" />
-            <input type="number" placeholder="Base Distance (KM)" value={formData.baseDistanceKm} onChange={e => setFormData({...formData, baseDistanceKm: Number(e.target.value)})} className="border p-2 rounded" />
-            <input type="number" placeholder="Per KM Charge" value={formData.perKmCharge} onChange={e => setFormData({...formData, perKmCharge: Number(e.target.value)})} className="border p-2 rounded" />
-            
-            <div className="flex items-center gap-2">
-                <input type="checkbox" checked={formData.platformFeeEnabled} onChange={e => setFormData({...formData, platformFeeEnabled: e.target.checked})} />
-                <input type="number" placeholder="Platform Fee" value={formData.platformFee} onChange={e => setFormData({...formData, platformFee: Number(e.target.value)})} className="border p-2 rounded flex-1" />
-            </div>
-            
-            <div className="flex items-center gap-2">
-                <input type="checkbox" checked={formData.nightDifferentialEnabled} onChange={e => setFormData({...formData, nightDifferentialEnabled: e.target.checked})} />
-                <input type="number" placeholder="Night Diff Fee" value={formData.nightDifferentialFee} onChange={e => setFormData({...formData, nightDifferentialFee: Number(e.target.value)})} className="border p-2 rounded flex-1" />
-            </div>
-            
-            <div className="flex items-center gap-2">
-                <input type="checkbox" checked={formData.surchargeEnabled} onChange={e => setFormData({...formData, surchargeEnabled: e.target.checked})} />
-                <input type="number" placeholder="Surcharge Fee" value={formData.surchargeFee} onChange={e => setFormData({...formData, surchargeFee: Number(e.target.value)})} className="border p-2 rounded flex-1" />
-            </div>
-            
-            <input type="file" onChange={handleFileChange} className="col-span-2" />
+    <div className="p-3 sm:p-5 space-y-4 bg-white text-black min-h-screen font-condensed">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate("/admin")}
+            className="p-1 text-neutral-500 hover:text-black rounded"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold uppercase tracking-tight">
+              COURIER & LOGISTICS FLEET
+            </h1>
+            <p className="text-xs text-neutral-500 font-sans">
+              Delivery pricing formulas, fleet availability, and dispatch settings
+            </p>
+          </div>
         </div>
-        
-        {imageSrc && (
-            <div className='mt-4 h-64 w-full relative'>
-                <Cropper
-                    image={imageSrc}
-                    crop={crop}
-                    zoom={zoom}
-                    aspect={1}
-                    onCropChange={setCrop}
-                    onCropComplete={onCropComplete}
-                    onZoomChange={setZoom}
-                />
-            </div>
-        )}
-
-        <button onClick={handleAddCourier} className="bg-black text-white px-4 py-2 rounded mt-4">Add Courier</button>
+        <button
+          type="button"
+          onClick={() => setShowAddForm(!showAddForm)}
+          className="flex items-center gap-1 px-3 py-1.5 bg-black text-white text-xs uppercase rounded-lg hover:bg-neutral-800"
+        >
+          <Plus size={13} /> {showAddForm ? "Cancel" : "Add Courier"}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {loading ? (
-          <CourierListSkeleton count={4} />
-        ) : (
-          couriers.map(c => (
-            <div key={c.id} className="bg-white p-4 rounded-xl shadow flex items-center justify-between">
-              <div className='flex items-center gap-3'>
-                  <img src={c.logoUrl} alt={c.name} className='w-12 h-12 object-contain'/>
-                  <div>
-                      <div className='font-bold'>{c.name}</div>
-                      <button onClick={() => updateCourier(c.id, { isAvailable: !c.isAvailable })} className={`text-xs px-2 py-1 rounded ${c.isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {c.isAvailable ? 'Available' : 'Unavailable'}
-                      </button>
+      {/* Add Courier Form */}
+      {showAddForm && (
+        <form onSubmit={handleAddCourier} className="p-4 bg-neutral-50 rounded-xl border border-neutral-300 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase text-neutral-700">Add Courier Partner</span>
+            <div className="flex gap-1">
+              {COURIER_PRESETS.map((p, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => handleApplyPreset(p)}
+                  className="px-2 py-0.5 bg-white border border-neutral-300 text-neutral-700 text-[10px] rounded hover:bg-neutral-100"
+                >
+                  Preset: {p.name.split(" ")[0]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 font-sans">
+            <div>
+              <label className="text-[11px] font-condensed uppercase text-neutral-600 block mb-1">
+                Courier / Fleet Name
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Lalamove Priority"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded-lg text-xs outline-none focus:border-black"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-condensed uppercase text-neutral-600 block mb-1">
+                Logo / Avatar Image URL
+              </label>
+              <input
+                type="text"
+                placeholder="https://..."
+                value={formData.logoUrl}
+                onChange={(e) => setFormData({ ...formData, logoUrl: e.target.value })}
+                className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded-lg text-xs outline-none focus:border-black"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 font-sans font-mono">
+            <div>
+              <label className="text-[10px] font-condensed uppercase text-neutral-600 block mb-1">
+                Base Fare (₱)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={formData.baseFare}
+                onChange={(e) => setFormData({ ...formData, baseFare: Number(e.target.value) })}
+                className="w-full px-2 py-1.5 bg-white border border-neutral-300 rounded-lg text-xs outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-condensed uppercase text-neutral-600 block mb-1">
+                Base Dist (km)
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={formData.baseDistanceKm}
+                onChange={(e) => setFormData({ ...formData, baseDistanceKm: Number(e.target.value) })}
+                className="w-full px-2 py-1.5 bg-white border border-neutral-300 rounded-lg text-xs outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-condensed uppercase text-neutral-600 block mb-1">
+                Per KM (₱)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={formData.perKmCharge}
+                onChange={(e) => setFormData({ ...formData, perKmCharge: Number(e.target.value) })}
+                className="w-full px-2 py-1.5 bg-white border border-neutral-300 rounded-lg text-xs outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1 font-condensed uppercase">
+            <button
+              type="button"
+              onClick={() => setShowAddForm(false)}
+              className="px-3 py-1.5 text-xs border border-neutral-300 rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-1.5 text-xs bg-black text-white rounded-lg hover:bg-neutral-800"
+            >
+              Save Courier
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Courier Fleets Grid */}
+      {loading ? (
+        <CourierListSkeleton count={3} />
+      ) : (
+        <div className="space-y-2.5">
+          {couriers.length === 0 ? (
+            <div className="text-center py-8 text-xs text-neutral-400 font-sans">
+              No couriers configured yet. Add your first courier above.
+            </div>
+          ) : (
+            couriers.map((c) => (
+              <div
+                key={c.id}
+                className="bg-white border border-neutral-200 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-2xs hover:border-neutral-400 transition"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-11 h-11 rounded-lg border border-neutral-200 overflow-hidden bg-neutral-50 flex items-center justify-center shrink-0">
+                    <img src={c.logoUrl} alt={c.name} className="w-full h-full object-cover" />
                   </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-sm text-neutral-900 truncate uppercase">{c.name}</div>
+                    <div className="text-xs text-neutral-500 font-sans mt-0.5">
+                      Base: <span className="font-mono font-bold text-black">{formatCurrency(c.baseFare)}</span> for{" "}
+                      {c.baseDistanceKm}km • +{formatCurrency(c.perKmCharge)}/km
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => updateCourier(c.id, { isAvailable: !c.isAvailable })}
+                    className={`text-xs px-2.5 py-1 rounded-lg uppercase border font-bold ${
+                      c.isAvailable
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                        : "bg-rose-50 text-rose-800 border-rose-300"
+                    }`}
+                  >
+                    {c.isAvailable ? "Online" : "Paused"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeCourier(c.id)}
+                    className="p-1 text-neutral-400 hover:text-red-600"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
-              <button onClick={() => removeCourier(c.id)} className="text-red-500">Remove</button>
-            </div>
-          ))
-        )}
-      </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

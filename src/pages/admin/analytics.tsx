@@ -1,9 +1,11 @@
+import { useNavigate } from "react-router-dom";
 import { SalesPerformanceChart } from "@/components/admin/SalesPerformanceChart.tsx";
 import { useOrders } from "@/hooks/useOrders.ts";
-import { TrendingUp, ShoppingBag, DollarSign, PackageCheck, AlertCircle, ArrowUpRight } from "lucide-react";
+import { TrendingUp, ShoppingBag, DollarSign, PackageCheck, AlertCircle, ArrowUpRight, ArrowLeft } from "lucide-react";
 import { formatCurrency } from "@/lib/utils.ts";
 
 export default function AdminAnalyticsPage() {
+  const navigate = useNavigate();
   const { allOrders } = useOrders();
 
   const confirmedOrders = allOrders.filter(
@@ -13,22 +15,31 @@ export default function AdminAnalyticsPage() {
   const totalGrossSales = allOrders.reduce((acc, curr) => acc + curr.total, 0);
 
   return (
-    <div className="p-3 sm:p-5 space-y-4">
+    <div className="p-3 sm:p-5 space-y-4 bg-white text-black min-h-screen">
       {/* Page Title */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1
-            className="text-lg font-normal uppercase text-black"
-            style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+      <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate("/admin")}
+            className="p-1 text-neutral-500 hover:text-black rounded"
           >
-            SALES & REVENUE ANALYTICS
-          </h1>
-          <p
-            className="text-xs text-neutral-500 font-normal"
-            style={{ fontFamily: "'Ubuntu', sans-serif" }}
-          >
-            30-Day performance dashboard, daily metrics, and revenue breakdown
-          </p>
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1
+              className="text-xl font-bold uppercase tracking-tight"
+              style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+            >
+              SALES & REVENUE ANALYTICS
+            </h1>
+            <p
+              className="text-xs text-neutral-500 font-normal"
+              style={{ fontFamily: "'Ubuntu', sans-serif" }}
+            >
+              30-Day performance dashboard, daily metrics, and revenue breakdown
+            </p>
+          </div>
         </div>
       </div>
 

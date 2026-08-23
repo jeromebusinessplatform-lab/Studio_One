@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { collection, onSnapshot, query, doc, updateDoc, addDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { Courier } from "../types/courier";
+export type { Courier };
 
 export function useCouriers() {
   const [couriers, setCouriers] = useState<Courier[]>([]);
