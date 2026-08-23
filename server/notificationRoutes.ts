@@ -1,5 +1,6 @@
 import type { Application, Request, Response } from "express";
 import { firestoreService } from "./firestoreService.js";
+import { migratePrimeMemberIds } from "./primeIdentity.js";
 
 export async function createNotification(data: {
   telegramUserId: string;
@@ -23,6 +24,10 @@ export async function createNotification(data: {
 }
 
 export function installNotificationRoutes(app: Application) {
+  // Run the one-time customer MID migration in the server process. The migration
+  // is guarded by a persistent systemConfig marker, so restarts do not repeat it.
+  void migratePrimeMemberIds();
+
   app.get("/api/notifications", async (req: Request, res: Response) => {
     try {
       const telegramUserId = String(req.query.telegramUserId || "");
@@ -31,7 +36,6 @@ export function installNotificationRoutes(app: Application) {
         .filter((n: any) => !telegramUserId || String(n.telegramUserId) === telegramUserId || !n.telegramUserId)
         .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 
-      // If user has no notifications yet, seed default real welcome & order notifications
       if (userList.length === 0 && telegramUserId) {
         const welcome = await createNotification({
           telegramUserId,
