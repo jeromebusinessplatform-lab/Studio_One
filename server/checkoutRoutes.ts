@@ -234,6 +234,19 @@ export function installCheckoutRoutes(app: Application) {
       };
 
       const createdOrder = await firestoreService.addDocument("orders", order);
+
+      // Create server notification for order placement
+      await firestoreService.addDocument("notifications", {
+        telegramUserId: tg,
+        title: `Order #${orderNumber} Placed`,
+        message: `Your order has been received and is under review. Estimated queue waiting time: ${estimatedWaitingMinutes} mins.`,
+        type: "order",
+        iconName: "Clock",
+        color: "#f97316",
+        read: false,
+        createdAt: now,
+      });
+
       setTelegramSession(res, tg);
       return res.status(201).json({ order: createdOrder });
     } catch (error: any) {

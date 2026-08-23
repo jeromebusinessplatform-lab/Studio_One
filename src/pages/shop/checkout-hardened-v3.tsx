@@ -26,6 +26,7 @@ import { GeoAddressAutocomplete } from "@/components/GeoAddressAutocomplete.tsx"
 import { ReceiptOcrScanner } from "@/components/ReceiptOcrScanner.tsx";
 import type { ReceiptOcrResult } from "@/types/ocr.ts";
 import { formatCurrency } from "@/lib/utils.ts";
+import { motion, AnimatePresence } from "motion/react";
 
 type Step = 1 | 2 | 3 | 4;
 type DeliveryPaymentOption = "PAY_AT_CHECKOUT" | "PAY_UPON_FULFILLMENT";
@@ -89,6 +90,7 @@ export default function CheckoutPage() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [successOrder, setSuccessOrder] = useState<any>(null);
 
   // Load recently used addresses persisted from past orders and local storage
   const [recentAddresses, setRecentAddresses] = useState<string[]>([]);
@@ -257,6 +259,7 @@ export default function CheckoutPage() {
   };
 
   const submitOrder = async () => {
+    if (submitting) return; // Prevent double-tapping
     if (!validateReceiver() || !validateDelivery() || !validatePayment() || !quote || !checkoutItems.length) return;
     setSubmitting(true);
     try {
@@ -289,20 +292,10 @@ export default function CheckoutPage() {
       if (selectedItems.length) removeSelectedItems();
       else clearCart();
 
-      toast.success("Order submitted for review.");
-      navigate(`/shop/order-confirmation/${created.orderNumber}`, {
-        state: {
-          orderNumber: created.orderNumber,
-          queuePosition: created.queuePosition,
-          estimatedWaitingMinutes: created.estimatedWaitingMinutes,
-          estimatedDispatchTime: created.estimatedDispatchTime,
-          distanceKm: created.distanceKm,
-        },
-      });
+      setSuccessOrder(created);
     } catch (error: any) {
       console.error("Hardened checkout submission failed:", error);
       toast.error(error?.message || "Unable to submit the order. Please try again.");
-    } finally {
       setSubmitting(false);
     }
   };
@@ -793,6 +786,52 @@ export default function CheckoutPage() {
           </div>
         )}
       </div>
+
+      {/* Successful Order Submission Animation Modal */}
+      <AnimatePresence>
+        {successOrder && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl text-center space-y-4 border border-neutral-200"
+            >
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-2 shadow-inner">
+                <Check size={32} className="stroke-[3]" />
+              </div>
+              <h2 className="text-xl font-bold uppercase text-neutral-900" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+                Order Placed Successfully!
+              </h2>
+              <p className="text-xs text-neutral-600 leading-relaxed">
+                Your order <strong className="font-mono text-black">#{successOrder.orderNumber}</strong> has been securely validated and submitted for priority queue review.
+              </p>
+              <div className="bg-neutral-50 p-3 rounded-2xl border border-neutral-200 text-xs text-left space-y-1 font-mono">
+                <div className="flex justify-between"><span>Queue Position:</span><strong className="text-black">#{successOrder.queuePosition}</strong></div>
+                <div className="flex justify-between"><span>Estimated Wait:</span><strong className="text-black">{successOrder.estimatedWaitingMinutes} mins</strong></div>
+                <div className="flex justify-between"><span>Total Amount:</span><strong className="text-black">{formatCurrency(successOrder.total)}</strong></div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(`/shop/order-confirmation/${successOrder.orderNumber}`, {
+                    state: {
+                      orderNumber: successOrder.orderNumber,
+                      queuePosition: successOrder.queuePosition,
+                      estimatedWaitingMinutes: successOrder.estimatedWaitingMinutes,
+                      estimatedDispatchTime: successOrder.estimatedDispatchTime,
+                      distanceKm: successOrder.distanceKm,
+                    },
+                  });
+                }}
+                className="w-full bg-black text-white py-3 rounded-xl font-bold text-xs hover:bg-neutral-800 transition shadow-md cursor-pointer uppercase tracking-wide"
+              >
+                View Order Tracking & Details
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

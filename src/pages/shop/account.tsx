@@ -5,6 +5,7 @@ import { useOrders } from "@/hooks/useOrders";
 import { User, ShieldCheck, ShoppingBag, Bell, HelpCircle, Pencil } from "lucide-react";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { toast } from "sonner";
 
 export default function AccountPage() {
   const { customer, isAuthenticated, isTelegramEnv, error: telegramError, isLoading: isTelegramLoading } = useTelegram();
@@ -26,13 +27,31 @@ export default function AccountPage() {
     if (!file || !customer?.telegramUserId) return;
     setIsUpdating(true);
     try {
-      const storageRef = ref(storage, `avatars/${customer.telegramUserId}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
+      let url = "";
+      try {
+        const storageRef = ref(storage, `avatars/${customer.telegramUserId}_${Date.now()}`);
+        await uploadBytes(storageRef, file);
+        url = await getDownloadURL(storageRef);
+      } catch (fbErr) {
+        console.warn("Firebase storage upload failed, using Data URL fallback:", fbErr);
+        url = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+
       await updateCustomerAvatar(customer.telegramUserId, url, true);
       setAvatarUrl(url);
-    } catch (error) { console.error(error); alert("Failed to upload avatar."); }
-    finally { setIsUpdating(false); }
+      toast.success("Profile avatar updated successfully!");
+    } catch (error) { 
+      console.error(error); 
+      toast.error("Failed to upload avatar."); 
+    }
+    finally { 
+      setIsUpdating(false); 
+    }
   };
 
   if (isTelegramLoading) return <div className="min-h-[60vh] flex items-center justify-center p-6 text-center text-neutral-500"><div className="animate-pulse">Loading account...</div></div>;

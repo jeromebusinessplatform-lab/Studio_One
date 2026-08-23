@@ -6,6 +6,7 @@ import axios from "axios";
 import FormData from "form-data";
 import crypto from "node:crypto";
 import { installReleaseRoutes } from "./server/releaseRoutes.js";
+import { installNotificationRoutes } from "./server/notificationRoutes.js";
 import { firestoreService } from "./server/firestoreService.js";
 
 // Utility for syncing Telegram Avatar
@@ -398,6 +399,7 @@ app.post("/api/ocr/analyze-receipt", async (req, res) => {
 });
 
 installReleaseRoutes(app);
+installNotificationRoutes(app);
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

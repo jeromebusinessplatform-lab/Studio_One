@@ -179,80 +179,23 @@ export default function OrdersPage() {
                 </span>
               </div>
 
-              {/* Items summary with individual Star Rating & Comment trigger */}
-              <div className="space-y-2.5">
+              {/* Items summary */}
+              <div className="space-y-2">
                 <div className="text-[11px] font-medium text-neutral-400 uppercase tracking-wider" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-                  Purchased Items & Reviews
+                  Purchased Items
                 </div>
 
-                <div className="divide-y divide-neutral-100 space-y-2">
-                  {order.items.map((it, idx) => {
-                    const review = getReviewForOrderItem(order._id, it.productId);
-
-                    return (
-                      <div key={idx} className="pt-2 first:pt-0 space-y-1.5">
-                        <div className="flex justify-between items-start text-xs font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                          <div className="pr-2 font-medium text-black">
-                            <span className="font-bold text-neutral-800">{it.quantity}x</span> {it.productName}
-                          </div>
-                          <span className="font-semibold text-neutral-900 shrink-0 font-mono">
-                            {formatCurrency(it.subtotal)}
-                          </span>
-                        </div>
-
-                        {/* Rating and Review action / preview */}
-                        {review ? (
-                          <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-2.5 text-xs space-y-1">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5">
-                                <StarRating rating={review.rating} size={13} showScore={true} />
-                                <span className="text-[10px] text-amber-900 font-bold font-mono">Your Review</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenReview(order, it)}
-                                className="text-[11px] text-neutral-600 hover:text-black underline cursor-pointer"
-                                style={{ fontFamily: "'Ubuntu', sans-serif" }}
-                              >
-                                Edit Review
-                              </button>
-                            </div>
-                            <p className="text-xs text-neutral-700 italic line-clamp-2" style={{ fontFamily: "'Ubuntu', sans-serif", fontSize: "13px" }}>
-                              "{review.comment}"
-                            </p>
-                            {review.tags && review.tags.length > 0 && (
-                              <div className="flex flex-wrap gap-1 pt-0.5">
-                                {review.tags.map((tag) => (
-                                  <span
-                                    key={tag}
-                                    className="text-[9px] bg-white text-neutral-600 border border-amber-200 px-1.5 py-0.2 rounded-md font-mono"
-                                  >
-                                    #{tag}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between bg-neutral-50 rounded-xl px-2.5 py-1.5 border border-neutral-200/70">
-                            <span className="text-[11px] text-neutral-500 flex items-center gap-1" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                              <Star size={11} className="text-amber-500 fill-amber-400" />
-                              Rate this product
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenReview(order, it)}
-                              className="text-[11px] font-medium text-black bg-white hover:bg-neutral-100 border border-neutral-200 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition shadow-2xs"
-                              style={{ fontFamily: "'Ubuntu', sans-serif" }}
-                            >
-                              <MessageSquare size={11} className="text-neutral-700" />
-                              <span>Write Review</span>
-                            </button>
-                          </div>
-                        )}
+                <div className="divide-y divide-neutral-100 space-y-1.5">
+                  {order.items.map((it, idx) => (
+                    <div key={idx} className="pt-2 first:pt-0 flex justify-between items-start text-xs font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
+                      <div className="pr-2 font-medium text-black">
+                        <span className="font-bold text-neutral-800">{it.quantity}x</span> {it.productName}
                       </div>
-                    );
-                  })}
+                      <span className="font-semibold text-neutral-900 shrink-0 font-mono">
+                        {formatCurrency(it.subtotal)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
