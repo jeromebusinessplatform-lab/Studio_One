@@ -8,6 +8,17 @@ import crypto from "node:crypto";
 import { installReleaseRoutes } from "./server/releaseRoutes.js";
 import { firestoreService } from "./server/firestoreService.js";
 
+// Utility for syncing Telegram Avatar
+async function syncTelegramAvatar(customerId: string) {
+    const customer = await firestoreService.getDocument("customers", customerId);
+    if (!customer || customer.manualAvatarOverride) return;
+    // STUB: Here we would fetch Telegram profile photo
+    // For now, we assume Telegram API integration returns a URL
+    // const telegramAvatarUrl = await telegramApi.getAvatar(customer.telegramUserId);
+    // await firestoreService.updateDocument("customers", customerId, { avatarUrl: telegramAvatarUrl });
+    console.log(`Syncing avatar for customer ${customerId}`);
+}
+
 dotenv.config();
 
 const app = express();

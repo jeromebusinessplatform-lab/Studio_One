@@ -1,19 +1,49 @@
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useTelegram } from "@/context/TelegramContext.tsx";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
-import { User, ShieldCheck, ShoppingBag, Bell, HelpCircle } from "lucide-react";
+import { User, ShieldCheck, ShoppingBag, Bell, HelpCircle, Upload } from "lucide-react";
+import { storage } from "@/lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 export default function AccountPage() {
   const { customer, isAuthenticated, isTelegramEnv, error: telegramError, isLoading: isTelegramLoading } = useTelegram();
-  const { customers, loading: customersLoading, refresh } = useCustomers();
+  const { customers, loading: customersLoading, refresh, updateCustomerAvatar } = useCustomers();
   const { orders } = useOrders(customer?.telegramUserId);
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
       void refresh();
     }
   }, [isAuthenticated, refresh]);
+
+  useEffect(() => {
+    const customerRecord = customers.find(c => c.telegramUserId === customer?.telegramUserId);
+    if (customerRecord?.avatarUrl) {
+        setAvatarUrl(customerRecord.avatarUrl);
+    }
+  }, [customers, customer]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !customer?.telegramUserId) return;
+    setIsUpdating(true);
+    try {
+        const storageRef = ref(storage, `avatars/${customer.telegramUserId}`);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        await updateCustomerAvatar(customer.telegramUserId, url, true);
+        setAvatarUrl(url);
+    } catch (e) {
+        console.error(e);
+        alert("Failed to upload avatar.");
+    } finally {
+        setIsUpdating(false);
+    }
+  };
 
   if (isTelegramLoading) {
     return (
@@ -60,11 +90,33 @@ export default function AccountPage() {
       <div className="p-3 space-y-3">
         {/* Profile Card */}
         <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm text-center">
-            <div className="w-20 h-20 rounded-full bg-neutral-200 mx-auto mb-3 flex items-center justify-center">
-                <User size={40} className="text-neutral-500" />
+            <div className="w-20 h-20 rounded-full bg-neutral-200 mx-auto mb-3 flex items-center justify-center overflow-hidden">
+                {avatarUrl ? (
+                    <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                    <User size={40} className="text-neutral-500" />
+                )}
             </div>
             <div className="text-lg font-bold">{customerData.telegramDisplayName}</div>
-            <div className="text-neutral-500 text-sm">@{customerData.telegramUsername}</div>
+            <div className="text-neutral-500 text-sm mb-4">@{customerData.telegramUsername}</div>
+            
+            <div className="space-y-2 mt-2">
+                <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/*"
+                    className="hidden"
+                />
+                <button 
+                    onClick={() => fileInputRef.current?.click()} 
+                    disabled={isUpdating}
+                    className="w-full text-xs p-2 bg-black text-white rounded font-bold flex items-center justify-center gap-2"
+                >
+                    <Upload size={14} />
+                    {isUpdating ? "Uploading..." : "Upload Avatar"}
+                </button>
+            </div>
             
             <div className="grid grid-cols-2 gap-4 mt-6 text-xs text-left">
                 <div className="border p-2 rounded">

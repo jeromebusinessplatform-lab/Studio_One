@@ -7,6 +7,8 @@ export interface Customer {
   telegramUserId: string;
   telegramDisplayName: string;
   telegramUsername?: string;
+  avatarUrl?: string; // Add this
+  manualAvatarOverride?: boolean; // Add this
   primeMemberId: string;
   vipTier: VipTier;
   points: number;
@@ -36,6 +38,8 @@ export function useCustomers() {
               telegramUserId: String(d.telegramUserId || d.id),
               telegramDisplayName: String(d.telegramDisplayName || "Unknown"),
               telegramUsername: d.telegramUsername || undefined,
+              avatarUrl: d.avatarUrl || undefined, // Map this
+              manualAvatarOverride: !!d.manualAvatarOverride,
               primeMemberId: String(d.primeMemberId || `PC${String(d.id).slice(0, 8).toUpperCase()}`),
               vipTier: (d.vipTier || "Bronze") as VipTier,
               points: pts,
@@ -60,6 +64,22 @@ export function useCustomers() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const updateCustomerAvatar = useCallback(async (id: string, avatarUrl: string, manualAvatarOverride: boolean = true) => {
+    setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, avatarUrl, manualAvatarOverride } : c)));
+    try {
+      const res = await fetch(`/api/customers/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl, manualAvatarOverride }),
+      });
+      if (!res.ok) throw new Error("Failed to update avatar on server");
+    } catch (err) {
+      console.error("updateCustomerAvatar error:", err);
+      throw err;
+    }
+  }, []);
 
   const updateCustomerVip = useCallback(async (id: string, vipTier: VipTier) => {
     setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, vipTier } : c)));
@@ -177,6 +197,7 @@ export function useCustomers() {
     customers,
     loading,
     refresh: load,
+    updateCustomerAvatar,
     updateCustomerVip,
     updateCustomerPoints,
     deleteCustomer,
