@@ -177,10 +177,13 @@ export default function CheckoutPage() {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || "Unable to calculate secure checkout quote");
         if (!data.quote) throw new Error("Checkout quote unavailable");
-        return data.quote as Quote;
+        return data;
       })
-      .then((nextQuote) => {
-        if (!cancelled) setQuote(nextQuote);
+      .then((data) => {
+        if (!cancelled) {
+          setQuote(data.quote);
+          setQuoteError(data.promoError || null);
+        }
       })
       .catch((error: any) => {
         if (!cancelled) {
@@ -700,7 +703,7 @@ export default function CheckoutPage() {
                 </span>
               </div>
               <p className="text-neutral-600 text-[11px] mt-0.5">
-                {quote?.distanceKm?.toFixed(1)} km • {deliveryPaymentOption === "PAY_AT_CHECKOUT" ? "Paid at checkout" : "Pay upon fulfillment (Not in final checkout amount)"}
+                {(quote?.distanceKm ?? distanceKm).toFixed(1)} km • {deliveryPaymentOption === "PAY_AT_CHECKOUT" ? "Paid at checkout" : "Pay upon fulfillment (Not in final checkout amount)"}
               </p>
               {quote?.freeDelivery && (
                 <p className="font-semibold text-emerald-700 text-[11px]">Promo / Free Delivery Code Applied: {quote.promoCode}</p>

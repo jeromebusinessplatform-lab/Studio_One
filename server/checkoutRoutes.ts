@@ -125,7 +125,14 @@ async function buildQuote(input: any, telegramId: string) {
   if (!courier) throw new Error("Selected delivery provider is unavailable");
   if (courier.isAvailable !== true) throw new Error("Selected delivery provider is currently unavailable");
 
-  const promo = await resolvePromoOrReferral(telegramId, input.couponCode || input.promoCode, input.referralCode, subtotal);
+  let promo: AppliedPromo | null = null;
+  let promoError: string | null = null;
+  try {
+    promo = await resolvePromoOrReferral(telegramId, input.couponCode || input.promoCode, input.referralCode, subtotal);
+  } catch (err: any) {
+    promoError = err?.message || "Invalid coupon or referral code";
+    promo = null;
+  }
   const deliveryCharge = promo?.freeDelivery ? 0 : calculateCourierCharge(courier, distanceKm);
   const deliveryPaymentOption: DeliveryPaymentOption = input.deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? "PAY_UPON_FULFILLMENT" : "PAY_AT_CHECKOUT";
   const deliveryDueNow = deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? 0 : deliveryCharge;
@@ -139,7 +146,7 @@ async function buildQuote(input: any, telegramId: string) {
   const tax = roundMoney((subtotal + charges) * TAX_RATE);
   const total = roundMoney(subtotal + charges + tax + deliveryDueNow);
   const fulfillmentTotal = roundMoney(subtotal + charges + tax + deliveryCharge);
-  return { items, normalizedItems, subtotal, charges, tax, deliveryCharge, deliveryDueNow, fulfillmentTotal, total, courier: { id: courier.id || courierId, name: String(courier.name || "Delivery Provider") }, distanceKm, deliveryPaymentOption, promo };
+  return { items, normalizedItems, subtotal, charges, tax, deliveryCharge, deliveryDueNow, fulfillmentTotal, total, courier: { id: courier.id || courierId, name: String(courier.name || "Delivery Provider") }, distanceKm, deliveryPaymentOption, promo, promoError };
 }
 
 function setTelegramSession(res: Response, userId: string) {
@@ -155,7 +162,24 @@ export function installCheckoutRoutes(app: Application) {
     const tg = telegramUserId(req) || (typeof req.body?.telegramUserId === "string" && req.body.telegramUserId.trim() ? req.body.telegramUserId.trim() : "guest_web_customer");
     try {
       const quote = await buildQuote(req.body || {}, tg);
-      return res.json({ quote: { subtotal: quote.subtotal, charges: quote.charges, tax: quote.tax, deliveryCharge: quote.deliveryCharge, deliveryDueNow: quote.deliveryDueNow, total: quote.total, fulfillmentTotal: quote.fulfillmentTotal, distanceKm: quote.distanceKm, deliveryPaymentOption: quote.deliveryPaymentOption, courierName: quote.courier.name, promoCode: quote.promo?.code || null, freeDelivery: Boolean(quote.promo?.freeDelivery), currency: "PHP" } });
+      return res.json({ 
+        quote: { 
+          subtotal: quote.subtotal, 
+          charges: quote.charges, 
+          tax: quote.tax, 
+          deliveryCharge: quote.deliveryCharge, 
+          deliveryDueNow: quote.deliveryDueNow, 
+          total: quote.total, 
+          fulfillmentTotal: quote.fulfillmentTotal, 
+          distanceKm: quote.distanceKm, 
+          deliveryPaymentOption: quote.deliveryPaymentOption, 
+          courierName: quote.courier.name, 
+          promoCode: quote.promo?.code || null, 
+          freeDelivery: Boolean(quote.promo?.freeDelivery), 
+          currency: "PHP" 
+        },
+        promoError: quote.promoError || null
+      });
     } catch (error: any) {
       return res.status(400).json({ error: error?.message || "Unable to calculate checkout quote" });
     }

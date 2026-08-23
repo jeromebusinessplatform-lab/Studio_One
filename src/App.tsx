@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { TelegramProvider } from "./context/TelegramContext.tsx";
 import { CartProvider } from "./context/CartContext.tsx";
@@ -6,6 +7,7 @@ import { AdminProvider, useAdmin } from "./context/AdminContext.tsx";
 import { Toaster } from "./components/ui/sonner.tsx";
 import GlobalProprietaryFooter from "./components/GlobalProprietaryFooter.tsx";
 import OrientationLock from "./components/OrientationLock.tsx";
+import { registerMemoryCleanup } from "./lib/memoryCleanup.ts";
 import ShopLayout from "./pages/shop/layout.tsx";
 import ShopCatalog from "./pages/shop/catalog-with-comparison.tsx";
 import CartPage from "./pages/shop/cart.tsx";
@@ -43,6 +45,31 @@ function AdminGuard({ children }: { children: ReactNode }) {
 function AppShell() {
   const location = useLocation();
   const isAdmin = location.pathname.startsWith("/admin");
+
+  useEffect(() => {
+    const unregister = registerMemoryCleanup({
+      id: "app-shell-cleanup",
+      onCleanup: () => {
+        // Clear transient caches, session storages if bloated, or cached objects
+        try {
+          // Clear any stale cached temp files or image object urls
+          if (typeof window !== "undefined" && window.caches) {
+            window.caches.keys().then((names) => {
+              names.forEach((name) => {
+                if (name.includes("temp") || name.includes("dynamic-cache")) {
+                  window.caches.delete(name);
+                }
+              });
+            });
+          }
+        } catch (e) {
+          // ignore
+        }
+      },
+    });
+    return unregister;
+  }, []);
+
   return (
     <div className={`w-full min-h-[100dvh] flex flex-col justify-start overflow-x-hidden ${isAdmin ? "bg-white text-neutral-900" : "bg-[#f3f4f6] text-neutral-900"}`}>
       <div className="flex-1 w-full flex flex-col min-h-0">
