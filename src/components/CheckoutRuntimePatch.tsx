@@ -26,8 +26,7 @@ function applyDeliveryLabels() {
   if (!row) return;
   const value = row.querySelector("span:last-child") as HTMLElement | null;
   if (!value) return;
-  const paymentText = document.body.innerText;
-  const fulfillment = /Pay upon fulfillment|Payable to courier|Not in final checkout amount/i.test(paymentText);
+  const fulfillment = /Pay upon fulfillment|Payable to courier|Not in final checkout amount/i.test(document.body.innerText);
   if (fulfillment) {
     const raw = value.textContent?.replace(/\(.*?\)/g, "").replace(/Payable to courier|Pay upon delivery/gi, "").trim() || "₱0.00";
     value.textContent = `(${raw})`;
@@ -52,6 +51,24 @@ export default function CheckoutRuntimePatch() {
     let disposed = false;
     const timers = new Map<HTMLInputElement, number>();
     const state = new WeakMap<HTMLInputElement, string>();
+
+    const hydratePrimeMid = async () => {
+      const uidInput = Array.from(document.querySelectorAll<HTMLInputElement>("input")).find((input) => input.value && /^\d+$/.test(input.value) && input.previousElementSibling?.textContent?.includes("TELEGRAM UID"));
+      const uid = uidInput?.value;
+      if (!uid) return;
+      try {
+        const response = await fetch(`/api/customers?userId=${encodeURIComponent(uid)}&_t=${Date.now()}`, { credentials: "same-origin", cache: "no-store" });
+        const data = await response.json().catch(() => ({}));
+        const mid = data?.customers?.[0]?.primeMemberId;
+        if (!mid || disposed) return;
+        const label = Array.from(document.querySelectorAll("span")).find((node) => node.textContent?.trim() === "PRIME MID");
+        const input = label?.parentElement?.querySelector("input") as HTMLInputElement | null;
+        if (input) {
+          input.value = mid;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      } catch {}
+    };
 
     const validateField = async (input: HTMLInputElement) => {
       const code = input.value.trim().toUpperCase();
@@ -96,6 +113,7 @@ export default function CheckoutRuntimePatch() {
 
     const observer = new MutationObserver(() => {
       applyDeliveryLabels();
+      void hydratePrimeMid();
       document.querySelectorAll<HTMLInputElement>('input[placeholder="COUPON"], input[placeholder="REFERRAL"]').forEach((input) => {
         if (!state.has(input)) input.addEventListener("input", onInput);
       });
@@ -103,7 +121,8 @@ export default function CheckoutRuntimePatch() {
 
     document.querySelectorAll<HTMLInputElement>('input[placeholder="COUPON"], input[placeholder="REFERRAL"]').forEach((input) => input.addEventListener("input", onInput));
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    const labelTimer = window.setInterval(applyDeliveryLabels, 300);
+    const labelTimer = window.setInterval(() => { applyDeliveryLabels(); void hydratePrimeMid(); }, 500);
+    void hydratePrimeMid();
 
     return () => {
       disposed = true;
