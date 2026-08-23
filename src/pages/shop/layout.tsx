@@ -6,9 +6,52 @@ import { useTelegram } from "@/context/TelegramContext.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import PrimeLogo from "@/components/PrimeLogo.tsx";
 import GlobalProprietaryFooter from "@/components/GlobalProprietaryFooter.tsx";
+import { useOrders } from "@/hooks/useOrders.ts";
+import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 
 export default function ShopLayout() {
-  const { isLoading } = useTelegram();
+  const { isLoading, customer } = useTelegram();
+  const { orders } = useOrders(customer?.telegramUserId);
+  const prevStatusesRef = useRef<Map<string, string>>(new Map());
+  const initialLoadRef = useRef(true);
+
+  useEffect(() => {
+    if (!orders || orders.length === 0) return;
+    const prevMap = prevStatusesRef.current;
+    if (initialLoadRef.current) {
+      orders.forEach((ord) => {
+        prevMap.set(ord._id || ord.orderNumber, ord.orderStatus);
+      });
+      initialLoadRef.current = false;
+      return;
+    }
+
+    orders.forEach((ord) => {
+      const id = ord._id || ord.orderNumber;
+      const oldStatus = prevMap.get(id);
+      if (oldStatus && oldStatus !== ord.orderStatus) {
+        prevMap.set(id, ord.orderStatus);
+        const readableStatus = ord.orderStatus.replace(/_/g, " ");
+        toast.success(
+          `📦 Order #${ord.orderNumber} status updated to: ${readableStatus}`,
+          {
+            duration: 8000,
+            style: {
+              background: "#000",
+              color: "#fff",
+              fontSize: "12px",
+              fontWeight: 600,
+              borderRadius: "12px",
+              padding: "10px 16px",
+            },
+          }
+        );
+      } else if (!oldStatus) {
+        prevMap.set(id, ord.orderStatus);
+      }
+    });
+  }, [orders]);
 
   if (isLoading) {
     return (

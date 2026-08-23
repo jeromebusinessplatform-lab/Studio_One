@@ -568,33 +568,17 @@ export default function CheckoutPage() {
           >
             {/* Card 1: CONFIRMED DELIVERY DETAILS */}
             <Card title="CONFIRMED DELIVERY DETAILS" icon={<MapPin size={15} />}>
-              <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between border-b border-neutral-100 pb-1">
-                  <span className="text-neutral-500 uppercase font-medium">Receiver Name</span>
-                  <span className="font-bold text-neutral-900 uppercase">{receiver || "N/A"}</span>
-                </div>
-                <div className="flex justify-between border-b border-neutral-100 pb-1">
-                  <span className="text-neutral-500 uppercase font-medium">Contact No.</span>
-                  <span className="font-mono font-bold text-neutral-900">{phone || "N/A"}</span>
-                </div>
-                <div className="flex justify-between border-b border-neutral-100 pb-1">
-                  <span className="text-neutral-500 uppercase font-medium">Delivery Address</span>
-                  <span className="font-medium text-neutral-900 text-right max-w-[65%] truncate">{addressInput || "N/A"}</span>
-                </div>
-                {notes && (
-                  <div className="flex justify-between pt-0.5">
-                    <span className="text-neutral-500 uppercase font-medium">Delivery Note</span>
-                    <span className="italic text-neutral-700 text-right max-w-[65%] truncate">“{notes}”</span>
-                  </div>
-                )}
-              </div>
+              <p className="font-bold text-neutral-950 uppercase">{receiver || "N/A"}</p>
+              <p className="text-neutral-600 font-mono">{phone || "N/A"}</p>
+              <p className="text-neutral-700 leading-snug mt-0.5">{addressInput || "N/A"}</p>
+              {notes && <p className="italic text-neutral-500 text-[11px] mt-1">“{notes}”</p>}
             </Card>
 
             <Card title="DELIVERY PROVIDER" icon={<Truck size={15} />}>
               <p className="text-[11px] text-neutral-500 -mt-1 font-normal mb-2">
                 Select your preferred courier service:
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 {couriers.map((courier) => {
                   const isSelected = courier.id === courierId;
                   const charge = calculateDeliveryCharge(courier, distanceKm);
@@ -723,65 +707,6 @@ export default function CheckoutPage() {
               )}
             </Summary>
 
-            {/* COUPON CODE & REFERRAL CODE CARD */}
-            <Card title="DISCOUNTS & REFERRAL CODES" icon={<Tag size={15} />}>
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wider block mb-1">
-                    Coupon Code (Optional)
-                  </label>
-                  <input
-                    value={promoCode}
-                    onChange={(e) => {
-                      setPromoCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 64));
-                      setQuote(null);
-                    }}
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-xs font-mono uppercase text-neutral-900 outline-none focus:border-black placeholder:text-neutral-400"
-                    placeholder="ENTER COUPON"
-                    autoCapitalize="characters"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wider block mb-1">
-                    Referral Code (Optional)
-                  </label>
-                  <input
-                    value={referralCode}
-                    onChange={(e) => {
-                      setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 64));
-                      setQuote(null);
-                    }}
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-xs font-mono uppercase text-neutral-900 outline-none focus:border-black placeholder:text-neutral-400"
-                    placeholder="ENTER REFERRAL"
-                    autoCapitalize="characters"
-                  />
-                </div>
-              </div>
-
-              {quoteLoading && (
-                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs flex items-center gap-2 text-neutral-600 mt-2.5">
-                  <Loader2 size={14} className="animate-spin text-neutral-900" />
-                  Revalidating secure promo & billing...
-                </div>
-              )}
-
-              {quoteError && (
-                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-1.5 mt-2.5">
-                  <AlertCircle size={14} className="shrink-0" />
-                  <span>{quoteError}</span>
-                </div>
-              )}
-
-              {quote?.freeDelivery && (
-                <div className="p-2.5 rounded-xl bg-emerald-900 text-white border border-emerald-800 text-xs flex items-center justify-between mt-2.5">
-                  <span className="flex items-center gap-1 font-medium">
-                    <Check size={13} /> Authorized Code Validated
-                  </span>
-                  <span className="font-bold">FREE DELIVERY ({quote.promoCode})</span>
-                </div>
-              )}
-            </Card>
-
             <Card title="ORDER ITEMS & PRICING" icon={<ShoppingBag size={15} />}>
               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                 {checkoutItems.map((item) => (
@@ -794,7 +719,60 @@ export default function CheckoutPage() {
                 ))}
               </div>
 
-              <div className="pt-2 mt-1 border-t border-neutral-100 space-y-1 text-xs">
+              {/* Coupon and Referral Codes below separator line */}
+              <div className="pt-2.5 mt-2.5 border-t border-neutral-100 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wider block mb-1">
+                      Coupon Code
+                    </label>
+                    <input
+                      value={promoCode}
+                      onChange={(e) => {
+                        setPromoCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 64));
+                        setQuote(null);
+                      }}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-2.5 py-1.5 text-xs font-mono uppercase text-neutral-900 outline-none focus:border-black placeholder:text-neutral-400"
+                      placeholder="COUPON"
+                      autoCapitalize="characters"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wider block mb-1">
+                      Referral Code
+                    </label>
+                    <input
+                      value={referralCode}
+                      onChange={(e) => {
+                        setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 64));
+                        setQuote(null);
+                      }}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-2.5 py-1.5 text-xs font-mono uppercase text-neutral-900 outline-none focus:border-black placeholder:text-neutral-400"
+                      placeholder="REFERRAL"
+                      autoCapitalize="characters"
+                    />
+                  </div>
+                </div>
+
+                {quoteLoading && (
+                  <div className="text-[11px] text-neutral-600 flex items-center gap-1.5">
+                    <Loader2 size={12} className="animate-spin text-neutral-900" />
+                    Revalidating promo & billing...
+                  </div>
+                )}
+                {quoteError && (
+                  <div className="text-[11px] text-rose-600 flex items-center gap-1">
+                    <AlertCircle size={12} /> {quoteError}
+                  </div>
+                )}
+                {quote?.freeDelivery && (
+                  <div className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                    <Check size={12} /> Free Delivery Applied ({quote.promoCode})
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2.5 mt-2.5 border-t border-neutral-100 space-y-1 text-xs">
                 <Line label="Items Subtotal" value={formatCurrency(quote?.subtotal ?? subtotalNow)} />
                 {Boolean(quote?.charges) && <Line label="Service Charges" value={formatCurrency(quote?.charges ?? 0)} />}
                 <Line label="Tax (5%)" value={formatCurrency(quote?.tax ?? fallbackTax)} />

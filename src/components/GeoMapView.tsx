@@ -28,7 +28,6 @@ export function GeoMapView({ centerLat, centerLon, zoom = 14, height = 200, dest
     if (!mapContainerRef.current) return;
     if (!mapInstanceRef.current) {
       const map = L.map(mapContainerRef.current, { center: [centerLat, centerLon], zoom, zoomControl: false, attributionControl: false, dragging: interactive, scrollWheelZoom: false, doubleClickZoom: interactive, touchZoom: interactive });
-      if (interactive) L.control.zoom({ position: "topright" }).addTo(map);
       const tileUrl = apiKey?.trim() ? `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${apiKey}` : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
       L.tileLayer(tileUrl, { maxZoom: 19, subdomains: ["a", "b", "c"] }).addTo(map);
       markersGroupRef.current = L.layerGroup().addTo(map);
@@ -74,8 +73,24 @@ export function GeoMapView({ centerLat, centerLon, zoom = 14, height = 200, dest
     <div className="relative w-full rounded-xl overflow-hidden border border-neutral-200 shadow-inner bg-neutral-100" style={{ height }}>
       <div ref={mapContainerRef} className="w-full h-full z-0" style={{ minHeight: height }} />
       
-      {/* Floating Action Buttons Overlay (Vertically aligned with top-right zoom controls) */}
-      <div className="absolute top-12 right-2.5 z-20 flex flex-col gap-1.5">
+      {/* Floating Action & Zoom Controls Overlay at Upper Left, Aligned Horizontally */}
+      <div className="absolute top-2.5 left-2.5 z-20 flex flex-row gap-1.5">
+        <button
+          type="button"
+          onClick={() => mapInstanceRef.current?.zoomIn()}
+          title="Zoom In"
+          className="w-8 h-8 bg-white hover:bg-neutral-50 text-neutral-900 rounded-lg shadow-md border border-neutral-200 flex items-center justify-center transition cursor-pointer font-bold text-sm"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={() => mapInstanceRef.current?.zoomOut()}
+          title="Zoom Out"
+          className="w-8 h-8 bg-white hover:bg-neutral-50 text-neutral-900 rounded-lg shadow-md border border-neutral-200 flex items-center justify-center transition cursor-pointer font-bold text-sm"
+        >
+          -
+        </button>
         {onDetectGps && (
           <button
             type="button"
