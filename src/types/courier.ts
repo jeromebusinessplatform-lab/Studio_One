@@ -2,10 +2,13 @@ export interface Courier {
   id: string;
   name: string;
   tier?: "STANDARD" | "EXPRESS" | "PRIORITY";
+  deliveryType?: "STANDARD" | "EXPRESS" | "PRIORITY";
+  priorityFee?: number;
+  expressFee?: number;
   logoUrl: string;
   isAvailable: boolean;
   baseFare: number;
-  baseDistanceKm: number; // Defaults to 4
+  baseDistanceKm: number;
   perKmCharge: number;
   platformFeeEnabled: boolean;
   platformFee: number;
