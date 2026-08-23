@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import L from "leaflet";
+import { LocateFixed, MapPin as MapPinIcon } from "lucide-react";
 
 interface GeoMapViewProps {
   centerLat: number;
@@ -13,9 +14,12 @@ interface GeoMapViewProps {
   routeCoordinates?: [number, number][];
   apiKey?: string;
   interactive?: boolean;
+  onDetectGps?: () => void;
+  onDropPin?: () => void;
+  isLocating?: boolean;
 }
 
-export function GeoMapView({ centerLat, centerLon, zoom = 14, height = 200, destinationLabel = "Delivery Destination", originLat, originLon, originLabel = "PRIME Logistics Hub", routeCoordinates, apiKey, interactive = true }: GeoMapViewProps) {
+export function GeoMapView({ centerLat, centerLon, zoom = 14, height = 200, destinationLabel = "Delivery Destination", originLat, originLon, originLabel = "PRIME Logistics Hub", routeCoordinates, apiKey, interactive = true, onDetectGps, onDropPin, isLocating }: GeoMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersGroupRef = useRef<L.LayerGroup | null>(null);
@@ -66,5 +70,38 @@ export function GeoMapView({ centerLat, centerLon, zoom = 14, height = 200, dest
 
   useEffect(() => () => { mapInstanceRef.current?.remove(); mapInstanceRef.current = null; }, []);
 
-  return <div className="relative w-full rounded-xl overflow-hidden border border-neutral-200 shadow-inner bg-neutral-100" style={{ height }}><div ref={mapContainerRef} className="w-full h-full z-0" style={{ minHeight: height }} /><div className="absolute bottom-2 right-2 z-10 bg-white/90 backdrop-blur-xs text-neutral-800 text-[10px] px-2 py-0.5 rounded-md font-mono border border-neutral-200 shadow-xs pointer-events-none">{centerLat.toFixed(4)}°N, {centerLon.toFixed(4)}°E</div></div>;
+  return (
+    <div className="relative w-full rounded-xl overflow-hidden border border-neutral-200 shadow-inner bg-neutral-100" style={{ height }}>
+      <div ref={mapContainerRef} className="w-full h-full z-0" style={{ minHeight: height }} />
+      
+      {/* Floating Action Buttons Overlay (Vertically aligned with top-right zoom controls) */}
+      <div className="absolute top-12 right-2.5 z-20 flex flex-col gap-1.5">
+        {onDetectGps && (
+          <button
+            type="button"
+            onClick={onDetectGps}
+            disabled={isLocating}
+            title="Use Current Location (GPS)"
+            className="w-8 h-8 bg-white hover:bg-neutral-50 text-neutral-900 rounded-lg shadow-md border border-neutral-200 flex items-center justify-center transition cursor-pointer disabled:opacity-50"
+          >
+            <LocateFixed size={15} className={isLocating ? "animate-spin text-blue-600" : ""} />
+          </button>
+        )}
+        {onDropPin && (
+          <button
+            type="button"
+            onClick={onDropPin}
+            title="Drop a Pin"
+            className="w-8 h-8 bg-white hover:bg-neutral-50 text-neutral-900 rounded-lg shadow-md border border-neutral-200 flex items-center justify-center transition cursor-pointer"
+          >
+            <MapPinIcon size={15} className="text-neutral-900" />
+          </button>
+        )}
+      </div>
+
+      <div className="absolute bottom-2 right-2 z-10 bg-white/90 backdrop-blur-xs text-neutral-800 text-[10px] px-2 py-0.5 rounded-md font-mono border border-neutral-200 shadow-xs pointer-events-none">
+        {centerLat.toFixed(4)}°N, {centerLon.toFixed(4)}°E
+      </div>
+    </div>
+  );
 }

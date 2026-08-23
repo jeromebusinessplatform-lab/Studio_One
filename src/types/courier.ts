@@ -1,6 +1,7 @@
 export interface Courier {
   id: string;
   name: string;
+  tier?: "STANDARD" | "EXPRESS" | "PRIORITY";
   logoUrl: string;
   isAvailable: boolean;
   baseFare: number;

@@ -70,24 +70,34 @@ function validateItems(input: any) {
   });
 }
 
-async function resolvePromo(telegramId: string, rawCode: unknown, subtotal: number): Promise<AppliedPromo | null> {
-  const code = String(rawCode || "").trim().toUpperCase();
+async function resolvePromoOrReferral(telegramId: string, rawCoupon: unknown, rawReferral: unknown, subtotal: number): Promise<AppliedPromo | null> {
+  const coupon = String(rawCoupon || "").trim().toUpperCase();
+  const referral = String(rawReferral || "").trim().toUpperCase();
+  const code = coupon || referral;
   if (!code) return null;
-  if (code.length < 3 || code.length > 64 || !/^[A-Z0-9_-]+$/.test(code)) throw new Error("Invalid promo code");
-  const promo = await firestoreService.getDocument("promos", code);
-  if (!promo) throw new Error("Promo code is invalid or unavailable");
-  if (promo.active !== true) throw new Error("Promo code is inactive");
-  if (promo.freeDelivery !== true) throw new Error("Promo code is not a free-delivery promotion");
+
+  if (code.length < 2 || code.length > 64 || !/^[A-Z0-9_-]+$/.test(code)) throw new Error("Invalid coupon or referral code");
+
+  let promo = await firestoreService.getDocument("promos", code);
+  if (!promo && coupon) {
+    const discounts = await firestoreService.getDocuments("discounts");
+    promo = discounts.find((d: any) => d.code?.toUpperCase() === code);
+  }
+  if (!promo && referral) {
+    const referrals = await firestoreService.getDocuments("referrals");
+    promo = referrals.find((r: any) => r.code?.toUpperCase() === code);
+  }
+
+  if (!promo) throw new Error("Coupon or referral code is invalid or unavailable");
+  if (promo.active === false) throw new Error("Coupon or referral code is inactive");
+
+  const freeDelivery = promo.freeDelivery === true || promo.type === "free_delivery" || (number(promo.value) === 0 && promo.code?.includes("SHIP"));
   const eligible = Array.isArray(promo.eligibleTelegramUserIds) ? promo.eligibleTelegramUserIds.map(String) : [];
-  if (!eligible.includes(telegramId)) throw new Error("This promo code is not available for your account");
+  if (eligible.length > 0 && !eligible.includes(telegramId)) throw new Error("This code is not available for your account");
   const minSubtotal = number(promo.minSubtotal, 0);
-  if (subtotal < minSubtotal) throw new Error(`This promo requires a minimum subtotal of PHP ${minSubtotal.toFixed(2)}`);
-  const now = Date.now();
-  const startsAt = promo.startsAt?.toMillis ? promo.startsAt.toMillis() : (promo.startsAt ? Date.parse(String(promo.startsAt)) : NaN);
-  const expiresAt = promo.expiresAt?.toMillis ? promo.expiresAt.toMillis() : (promo.expiresAt ? Date.parse(String(promo.expiresAt)) : NaN);
-  if (Number.isFinite(startsAt) && now < startsAt) throw new Error("Promo code is not active yet");
-  if (Number.isFinite(expiresAt) && now > expiresAt) throw new Error("Promo code has expired");
-  return { code, freeDelivery: true };
+  if (subtotal < minSubtotal) throw new Error(`This code requires a minimum subtotal of PHP ${minSubtotal.toFixed(2)}`);
+
+  return { code, freeDelivery: Boolean(freeDelivery) };
 }
 
 async function buildQuote(input: any, telegramId: string) {
@@ -115,7 +125,7 @@ async function buildQuote(input: any, telegramId: string) {
   if (!courier) throw new Error("Selected delivery provider is unavailable");
   if (courier.isAvailable !== true) throw new Error("Selected delivery provider is currently unavailable");
 
-  const promo = await resolvePromo(telegramId, input.promoCode, subtotal);
+  const promo = await resolvePromoOrReferral(telegramId, input.couponCode || input.promoCode, input.referralCode, subtotal);
   const deliveryCharge = promo?.freeDelivery ? 0 : calculateCourierCharge(courier, distanceKm);
   const deliveryPaymentOption: DeliveryPaymentOption = input.deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? "PAY_UPON_FULFILLMENT" : "PAY_AT_CHECKOUT";
   const deliveryDueNow = deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? 0 : deliveryCharge;

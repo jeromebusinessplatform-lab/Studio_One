@@ -23,6 +23,7 @@ interface GeoAddressAutocompleteProps {
   onSelectSuggestion: (loc: GeoLocation) => void;
   onDetectGps?: () => void;
   onDetectIp?: () => void;
+  onDropPin?: () => void;
   routeInfo: RouteInfo | null;
   isCalculatingRoute: boolean;
   warehouseName?: string;
@@ -36,10 +37,13 @@ export function GeoAddressAutocomplete({
   recentAddresses = [],
   onSelectRecentAddress,
   isLoading,
+  isLocating,
   isOpen,
   setIsOpen,
   selectedLocation,
   onSelectSuggestion,
+  onDetectGps,
+  onDropPin,
   routeInfo,
   isCalculatingRoute,
 }: GeoAddressAutocompleteProps) {
@@ -187,6 +191,9 @@ export function GeoAddressAutocomplete({
               centerLon={selectedLocation.lon}
               destinationLabel={selectedLocation.formatted}
               height={180}
+              onDetectGps={onDetectGps}
+              onDropPin={onDropPin}
+              isLocating={isLocating}
             />
           </div>
         </div>

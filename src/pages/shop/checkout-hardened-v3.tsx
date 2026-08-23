@@ -23,6 +23,7 @@ import { useOrders } from "@/hooks/useOrders.ts";
 import { useCouriers } from "@/hooks/useCouriers.ts";
 import { useAddressAutocomplete } from "@/hooks/useAddressAutocomplete.ts";
 import { GeoAddressAutocomplete } from "@/components/GeoAddressAutocomplete.tsx";
+import { GeoMapView } from "@/components/GeoMapView.tsx";
 import { ReceiptOcrScanner } from "@/components/ReceiptOcrScanner.tsx";
 import type { ReceiptOcrResult } from "@/types/ocr.ts";
 import { formatCurrency } from "@/lib/utils.ts";
@@ -121,15 +122,21 @@ export default function CheckoutPage() {
     setAddressInput,
     suggestions,
     isLoading: geoLoading,
+    isLocating,
     isOpen: geoOpen,
     setIsOpen: setGeoOpen,
     selectedLocation,
+    setSelectedLocation,
     selectSuggestion,
     selectAddressString,
+    detectCurrentLocation,
     routeInfo,
     isCalculatingRoute,
     geoConfig,
   } = useAddressAutocomplete("");
+
+  const [referralCode, setReferralCode] = useState("");
+  const [showDropPinModal, setShowDropPinModal] = useState(false);
 
   const selectedCourier = couriers.find((c) => c.id === courierId);
   const distanceKm = routeInfo?.distanceKm ?? 0;
@@ -137,7 +144,7 @@ export default function CheckoutPage() {
   const fallbackShipping = selectedCourier ? calculateDeliveryCharge(selectedCourier, distanceKm) : 0;
   const fallbackTax = Math.round(subtotalNow * 0.05 * 100) / 100;
   const payable = quote?.total ?? subtotalNow + fallbackTax + (deliveryPaymentOption === "PAY_AT_CHECKOUT" ? fallbackShipping : 0);
-  const quoteKey = `${itemsKey}|${courierId}|${distanceKm.toFixed(3)}|${deliveryPaymentOption}|${promoCode.trim().toUpperCase()}`;
+  const quoteKey = `${itemsKey}|${courierId}|${distanceKm.toFixed(3)}|${deliveryPaymentOption}|${promoCode.trim().toUpperCase()}|${referralCode.trim().toUpperCase()}`;
 
   useEffect(() => {
     let cancelled = false;
@@ -155,7 +162,8 @@ export default function CheckoutPage() {
       deliveryProviderId: selectedCourier.id,
       distanceKm,
       deliveryPaymentOption,
-      promoCode: promoCode.trim().toUpperCase() || undefined,
+      couponCode: promoCode.trim().toUpperCase() || undefined,
+      referralCode: referralCode.trim().toUpperCase() || undefined,
     };
 
     fetch("/api/checkout/quote", {
@@ -311,6 +319,47 @@ export default function CheckoutPage() {
 
   return (
     <div className="w-full min-h-screen bg-[#f3f4f6] pb-28">
+      {/* Drop a Pin Modal */}
+      {showDropPinModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-4 space-y-3 shadow-2xl animate-in fade-in duration-200">
+            <div className="flex justify-between items-center border-b border-neutral-100 pb-2">
+              <h3 className="font-bold uppercase text-sm tracking-wide">Drop a Pin on Location</h3>
+              <button type="button" onClick={() => setShowDropPinModal(false)} className="text-xs font-bold text-neutral-500 hover:text-black">✕</button>
+            </div>
+            <p className="text-xs text-neutral-600">Select or drop a delivery pin on the Metro Manila map.</p>
+            <div className="h-64 rounded-xl overflow-hidden border border-neutral-200">
+              <GeoMapView
+                centerLat={selectedLocation?.lat || 14.5516}
+                centerLon={selectedLocation?.lon || 121.0503}
+                destinationLabel="Dropped Pin Location"
+                height={256}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowDropPinModal(false)} className="px-3 py-1.5 text-xs border border-neutral-200 rounded-xl font-medium hover:bg-neutral-50">Cancel</button>
+              <button
+                type="button"
+                onClick={() => {
+                  const pinnedLoc = {
+                    formatted: "Dropped Pin Location, Metro Manila",
+                    lat: selectedLocation?.lat || 14.5516,
+                    lon: selectedLocation?.lon || 121.0503,
+                    source: "fallback" as const,
+                  };
+                  setSelectedLocation(pinnedLoc);
+                  setAddressInput(pinnedLoc.formatted);
+                  setShowDropPinModal(false);
+                  toast.success("Pin dropped successfully!");
+                }}
+                className="px-4 py-1.5 text-xs bg-black text-white rounded-xl font-semibold hover:bg-neutral-800 transition"
+              >
+                Confirm Location Pin
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Top Normalized Checkout Header */}
       <div className="bg-white border-b border-neutral-200 px-4 py-3 flex items-center justify-between shadow-2xs">
         <div className="flex items-center gap-3">
@@ -476,10 +525,13 @@ export default function CheckoutPage() {
                 recentAddresses={recentAddresses}
                 onSelectRecentAddress={(addr) => selectAddressString(addr)}
                 isLoading={geoLoading}
+                isLocating={isLocating}
                 isOpen={geoOpen}
                 setIsOpen={setGeoOpen}
                 selectedLocation={selectedLocation}
                 onSelectSuggestion={selectSuggestion}
+                onDetectGps={detectCurrentLocation}
+                onDropPin={() => setShowDropPinModal(true)}
                 routeInfo={routeInfo}
                 isCalculatingRoute={isCalculatingRoute}
                 warehouseName={geoConfig?.warehouse.name}
@@ -495,7 +547,13 @@ export default function CheckoutPage() {
             </Card>
 
             <div className="pt-1">
-              <PrimaryButton label="Continue to Delivery" />
+              <button
+                type="submit"
+                className="w-full py-3 bg-neutral-900 text-white rounded-xl font-bold uppercase text-xs tracking-wider flex items-center justify-center text-center hover:bg-black transition cursor-pointer shadow-md"
+                style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+              >
+                CONTINUE TO COURIER SELECTOR
+              </button>
             </div>
           </form>
         )}
@@ -508,36 +566,67 @@ export default function CheckoutPage() {
             }}
             className="space-y-3.5"
           >
+            {/* Card 1: CONFIRMED DELIVERY DETAILS */}
+            <Card title="CONFIRMED DELIVERY DETAILS" icon={<MapPin size={15} />}>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between border-b border-neutral-100 pb-1">
+                  <span className="text-neutral-500 uppercase font-medium">Receiver Name</span>
+                  <span className="font-bold text-neutral-900 uppercase">{receiver || "N/A"}</span>
+                </div>
+                <div className="flex justify-between border-b border-neutral-100 pb-1">
+                  <span className="text-neutral-500 uppercase font-medium">Contact No.</span>
+                  <span className="font-mono font-bold text-neutral-900">{phone || "N/A"}</span>
+                </div>
+                <div className="flex justify-between border-b border-neutral-100 pb-1">
+                  <span className="text-neutral-500 uppercase font-medium">Delivery Address</span>
+                  <span className="font-medium text-neutral-900 text-right max-w-[65%] truncate">{addressInput || "N/A"}</span>
+                </div>
+                {notes && (
+                  <div className="flex justify-between pt-0.5">
+                    <span className="text-neutral-500 uppercase font-medium">Delivery Note</span>
+                    <span className="italic text-neutral-700 text-right max-w-[65%] truncate">“{notes}”</span>
+                  </div>
+                )}
+              </div>
+            </Card>
+
             <Card title="DELIVERY PROVIDER" icon={<Truck size={15} />}>
-              <p className="text-[11px] text-neutral-500 -mt-1 font-normal">
+              <p className="text-[11px] text-neutral-500 -mt-1 font-normal mb-2">
                 Select your preferred courier service:
               </p>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 {couriers.map((courier) => {
                   const isSelected = courier.id === courierId;
                   const charge = calculateDeliveryCharge(courier, distanceKm);
+                  const tierLabel = (courier as any).tier || "STANDARD";
                   return (
                     <button
                       key={courier.id}
                       type="button"
                       disabled={!courier.isAvailable}
                       onClick={() => setCourierId(courier.id)}
-                      className={`relative min-h-[88px] rounded-xl border p-2 flex flex-col items-center justify-center transition-all ${
-                        isSelected
-                          ? "bg-neutral-900 text-white border-black shadow-xs"
-                          : "bg-white border-neutral-200 hover:border-neutral-300"
+                      className={`relative h-28 rounded-xl overflow-hidden border p-3 flex flex-col justify-end transition-all ${
+                        isSelected ? "border-black ring-2 ring-black shadow-md" : "border-neutral-200 hover:border-neutral-300"
                       } ${courier.isAvailable ? "cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
                     >
-                      <img src={courier.logoUrl} alt={courier.name} className="w-8 h-8 object-contain mb-1" />
-                      <span className="text-[9.5px] font-semibold text-center leading-tight line-clamp-1">
-                        {courier.name}
-                      </span>
-                      <span className={`text-[10px] font-bold mt-1 ${isSelected ? "text-emerald-300" : "text-neutral-900"}`}>
-                        {charge ? formatCurrency(charge) : "FREE PROMO"}
-                      </span>
+                      <img src={courier.logoUrl} alt={courier.name} className="absolute inset-0 w-full h-full object-cover opacity-80 hover:opacity-100 transition" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                      <div className="relative z-10 flex justify-between items-end w-full">
+                        <div>
+                          <span className="text-[10px] font-mono tracking-wider text-emerald-300 font-bold uppercase block">
+                            {tierLabel}
+                          </span>
+                          <span className="text-xs font-bold text-white uppercase truncate block">
+                            {courier.name}
+                          </span>
+                        </div>
+                        <span className="text-xs font-bold text-white font-mono bg-black/60 px-2 py-0.5 rounded">
+                          {charge ? formatCurrency(charge) : "FREE"}
+                        </span>
+                      </div>
                       {isSelected && (
-                        <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-2xs">
-                          <Check size={10} className="stroke-[3]" />
+                        <span className="absolute top-2 right-2 w-5 h-5 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-xs z-10">
+                          <Check size={12} className="stroke-[3]" />
                         </span>
                       )}
                     </button>
@@ -546,64 +635,27 @@ export default function CheckoutPage() {
               </div>
 
               {selectedCourier && routeInfo && (
-                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs flex items-center justify-between text-neutral-700">
+                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs flex items-center justify-between text-neutral-700 mt-3">
                   <span className="flex items-center gap-1.5 text-neutral-500">
                     <MapPin size={13} /> Distance
                   </span>
-                  <span className="font-semibold text-neutral-900">
+                  <span className="font-semibold text-neutral-900 font-mono">
                     {distanceKm.toFixed(1)} km • ~{Math.ceil(routeInfo.durationMinutes)} mins transit
                   </span>
                 </div>
               )}
 
-              {/* Promo code field */}
-              <div className="p-2.5 rounded-xl bg-white border border-neutral-200">
-                <Field label="Promo Code (Optional)" icon={<Tag size={11} />}>
-                  <div className="flex gap-2 mt-1">
-                    <input
-                      value={promoCode}
-                      onChange={(e) => {
-                        setPromoCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 64));
-                        setQuote(null);
-                      }}
-                      className="flex-1 bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-mono uppercase text-neutral-900 outline-none focus:border-black"
-                      placeholder="ENTER PROMO CODE"
-                      autoCapitalize="characters"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!promoCode.trim()) toast.error("Enter a promo code first.");
-                        else setQuoteError(null);
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-neutral-900 text-white text-xs font-semibold hover:bg-black transition cursor-pointer"
-                    >
-                      APPLY
-                    </button>
-                  </div>
-                </Field>
-              </div>
-
               {quoteLoading && (
-                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs flex items-center gap-2 text-neutral-600">
+                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs flex items-center gap-2 text-neutral-600 mt-3">
                   <Loader2 size={14} className="animate-spin text-neutral-900" />
                   Calculating secure delivery quote...
                 </div>
               )}
 
               {quoteError && (
-                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-1.5">
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-1.5 mt-3">
                   <AlertCircle size={14} className="shrink-0" />
                   <span>{quoteError}</span>
-                </div>
-              )}
-
-              {quote?.freeDelivery && (
-                <div className="p-2.5 rounded-xl bg-emerald-900 text-white border border-emerald-800 text-xs flex items-center justify-between">
-                  <span className="flex items-center gap-1 font-medium">
-                    <Check size={13} /> Authorized Promo
-                  </span>
-                  <span className="font-bold">FREE DELIVERY ({quote.promoCode})</span>
                 </div>
               )}
             </Card>
@@ -657,17 +709,78 @@ export default function CheckoutPage() {
             <Summary title="DELIVERY DETAILS" icon={<Truck size={15} />} onEdit={() => setStep(2)}>
               <div className="flex justify-between items-center font-bold text-neutral-950">
                 <span>{quote?.courierName || selectedCourier?.name}</span>
-                <span className="text-emerald-700">
-                  {quote?.deliveryDueNow ? formatCurrency(quote.deliveryDueNow) : "FREE"}
+                <span className={deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? "text-neutral-700 font-mono text-[11px]" : "text-emerald-700"}>
+                  {deliveryPaymentOption === "PAY_UPON_FULFILLMENT"
+                    ? `${formatCurrency(quote?.deliveryCharge ?? fallbackShipping)} (Payable to courier)`
+                    : (quote?.deliveryDueNow ? formatCurrency(quote.deliveryDueNow) : "FREE")}
                 </span>
               </div>
               <p className="text-neutral-600 text-[11px] mt-0.5">
-                {quote?.distanceKm?.toFixed(1)} km • {deliveryPaymentOption === "PAY_AT_CHECKOUT" ? "Paid at checkout" : "Pay upon fulfillment"}
+                {quote?.distanceKm?.toFixed(1)} km • {deliveryPaymentOption === "PAY_AT_CHECKOUT" ? "Paid at checkout" : "Pay upon fulfillment (Not in final checkout amount)"}
               </p>
               {quote?.freeDelivery && (
-                <p className="font-semibold text-emerald-700 text-[11px]">Promo: {quote.promoCode}</p>
+                <p className="font-semibold text-emerald-700 text-[11px]">Promo / Free Delivery Code Applied: {quote.promoCode}</p>
               )}
             </Summary>
+
+            {/* COUPON CODE & REFERRAL CODE CARD */}
+            <Card title="DISCOUNTS & REFERRAL CODES" icon={<Tag size={15} />}>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wider block mb-1">
+                    Coupon Code (Optional)
+                  </label>
+                  <input
+                    value={promoCode}
+                    onChange={(e) => {
+                      setPromoCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 64));
+                      setQuote(null);
+                    }}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-xs font-mono uppercase text-neutral-900 outline-none focus:border-black placeholder:text-neutral-400"
+                    placeholder="ENTER COUPON"
+                    autoCapitalize="characters"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-neutral-600 uppercase tracking-wider block mb-1">
+                    Referral Code (Optional)
+                  </label>
+                  <input
+                    value={referralCode}
+                    onChange={(e) => {
+                      setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 64));
+                      setQuote(null);
+                    }}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-xs font-mono uppercase text-neutral-900 outline-none focus:border-black placeholder:text-neutral-400"
+                    placeholder="ENTER REFERRAL"
+                    autoCapitalize="characters"
+                  />
+                </div>
+              </div>
+
+              {quoteLoading && (
+                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200 text-xs flex items-center gap-2 text-neutral-600 mt-2.5">
+                  <Loader2 size={14} className="animate-spin text-neutral-900" />
+                  Revalidating secure promo & billing...
+                </div>
+              )}
+
+              {quoteError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-1.5 mt-2.5">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>{quoteError}</span>
+                </div>
+              )}
+
+              {quote?.freeDelivery && (
+                <div className="p-2.5 rounded-xl bg-emerald-900 text-white border border-emerald-800 text-xs flex items-center justify-between mt-2.5">
+                  <span className="flex items-center gap-1 font-medium">
+                    <Check size={13} /> Authorized Code Validated
+                  </span>
+                  <span className="font-bold">FREE DELIVERY ({quote.promoCode})</span>
+                </div>
+              )}
+            </Card>
 
             <Card title="ORDER ITEMS & PRICING" icon={<ShoppingBag size={15} />}>
               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
@@ -687,7 +800,11 @@ export default function CheckoutPage() {
                 <Line label="Tax (5%)" value={formatCurrency(quote?.tax ?? fallbackTax)} />
                 <Line
                   label="Delivery Due Now"
-                  value={quote?.deliveryDueNow ? formatCurrency(quote.deliveryDueNow) : "FREE"}
+                  value={
+                    deliveryPaymentOption === "PAY_UPON_FULFILLMENT"
+                      ? `${formatCurrency(quote?.deliveryCharge ?? fallbackShipping)} (Pay upon delivery)`
+                      : (quote?.deliveryDueNow ? formatCurrency(quote.deliveryDueNow) : "FREE")
+                  }
                 />
                 <div className="pt-2 mt-1.5 border-t border-neutral-200 flex justify-between items-baseline font-bold">
                   <span className="text-sm uppercase tracking-tight" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>

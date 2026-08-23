@@ -66,6 +66,7 @@ export default function CourierPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
+    tier: "STANDARD" as "STANDARD" | "EXPRESS" | "PRIORITY",
     baseFare: 60,
     baseDistanceKm: 4,
     perKmCharge: 12,
@@ -78,9 +79,10 @@ export default function CourierPage() {
     logoUrl: "",
   });
 
-  const handleApplyPreset = (preset: (typeof COURIER_PRESETS)[0]) => {
+  const handleApplyPreset = (preset: (typeof COURIER_PRESETS)[0] & { tier?: "STANDARD" | "EXPRESS" | "PRIORITY" }) => {
     setFormData({
       ...preset,
+      tier: preset.tier || "STANDARD",
     });
     toast.success(`Loaded preset: ${preset.name}`);
   };
@@ -103,6 +105,7 @@ export default function CourierPage() {
       setShowAddForm(false);
       setFormData({
         name: "",
+        tier: "STANDARD",
         baseFare: 60,
         baseDistanceKm: 4,
         perKmCharge: 12,
@@ -169,7 +172,7 @@ export default function CourierPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-sans">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-sans">
             <div>
               <label className="text-[10px] font-condensed uppercase text-neutral-600 block mb-0.5">
                 Courier / Fleet Name
@@ -181,6 +184,20 @@ export default function CourierPage() {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded-lg text-xs outline-none focus:border-black"
               />
+            </div>
+            <div>
+              <label className="text-[10px] font-condensed uppercase text-neutral-600 block mb-0.5">
+                Service Tier
+              </label>
+              <select
+                value={formData.tier}
+                onChange={(e) => setFormData({ ...formData, tier: e.target.value as any })}
+                className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded-lg text-xs outline-none focus:border-black font-condensed uppercase font-bold"
+              >
+                <option value="STANDARD">STANDARD</option>
+                <option value="EXPRESS">EXPRESS</option>
+                <option value="PRIORITY">PRIORITY</option>
+              </select>
             </div>
             <div>
               <label className="text-[10px] font-condensed uppercase text-neutral-600 block mb-0.5">
