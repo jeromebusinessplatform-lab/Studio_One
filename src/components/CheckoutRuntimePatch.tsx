@@ -57,6 +57,14 @@ function setReactInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function applySuccessButton() {
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((candidate) => /View Order Tracking & Details|GO TO MY ORDERS/i.test(candidate.textContent || ""));
+  if (!button) return;
+  const text = button.querySelector("span");
+  if (text) text.textContent = "GO TO MY ORDERS";
+  else button.textContent = "GO TO MY ORDERS";
+}
+
 export default function CheckoutRuntimePatch() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -175,7 +183,7 @@ export default function CheckoutRuntimePatch() {
     const onSuccessOrderClick = (event: Event) => {
       const target = event.target as HTMLElement | null;
       const button = target?.closest("button") as HTMLButtonElement | null;
-      if (!button || !/View Order Tracking & Details/i.test(button.textContent || "")) return;
+      if (!button || !/View Order Tracking & Details|GO TO MY ORDERS/i.test(button.textContent || "")) return;
       event.preventDefault();
       event.stopPropagation();
       try { sessionStorage.removeItem(storageKey); } catch {}
@@ -191,6 +199,7 @@ export default function CheckoutRuntimePatch() {
 
     const observer = new MutationObserver(() => {
       applyDeliveryLabels();
+      applySuccessButton();
       hideCodeErrorCopy();
       restoreCodes();
       void hydratePrimeMid();
@@ -201,8 +210,9 @@ export default function CheckoutRuntimePatch() {
     document.addEventListener("keydown", onCodeKeyDown, true);
     document.addEventListener("click", onSuccessOrderClick, true);
     bindCodeInputs();
+    applySuccessButton();
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    const labelTimer = window.setInterval(() => { applyDeliveryLabels(); hideCodeErrorCopy(); restoreCodes(); void hydratePrimeMid(); }, 500);
+    const labelTimer = window.setInterval(() => { applyDeliveryLabels(); applySuccessButton(); hideCodeErrorCopy(); restoreCodes(); void hydratePrimeMid(); }, 500);
     void hydratePrimeMid();
 
     return () => {
