@@ -1,6 +1,7 @@
 import type { Application, Request, Response } from "express";
 import { firestoreService } from "./firestoreService.js";
 import { migratePrimeMemberIds } from "./primeIdentity.js";
+import { installCommerceRepairRoutes } from "./commerceRepairRoutes.js";
 
 export async function createNotification(data: {
   telegramUserId: string;
@@ -24,9 +25,8 @@ export async function createNotification(data: {
 }
 
 export function installNotificationRoutes(app: Application) {
-  // Run the one-time customer MID migration in the server process. The migration
-  // is guarded by a persistent systemConfig marker, so restarts do not repeat it.
   void migratePrimeMemberIds();
+  installCommerceRepairRoutes(app);
 
   app.get("/api/notifications", async (req: Request, res: Response) => {
     try {
@@ -81,19 +81,16 @@ export function installNotificationRoutes(app: Application) {
   app.post("/api/notifications/batch", async (req: Request, res: Response) => {
     try {
       const { action, ids, read } = req.body;
-      if (!Array.isArray(ids) || !ids.length) {
-        return res.status(400).json({ error: "No notification IDs provided" });
-      }
-
+      if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "No notification IDs provided" });
       if (action === "mark_read") {
         await firestoreService.batchUpdate("notifications", ids.map(String), { read: Boolean(read) });
         return res.json({ success: true });
-      } else if (action === "delete") {
+      }
+      if (action === "delete") {
         await firestoreService.batchDelete("notifications", ids.map(String));
         return res.json({ success: true });
-      } else {
-        return res.status(400).json({ error: "Invalid batch action" });
       }
+      return res.status(400).json({ error: "Invalid batch action" });
     } catch (error) {
       console.error("Batch notification error:", error);
       return res.status(500).json({ error: "Batch operation failed" });
