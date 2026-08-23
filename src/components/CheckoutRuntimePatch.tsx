@@ -21,7 +21,8 @@ function applyDeliveryLabels() {
   const label = labels.find((node) => node.textContent?.trim() === "Delivery Due Now");
   if (!label) return;
   const type = selectedDeliveryType();
-  label.textContent = `${type.charAt(0) + type.slice(1).toLowerCase()} Delivery Fee`;
+  const nextLabel = `${type.charAt(0) + type.slice(1).toLowerCase()} Delivery Fee`;
+  if (label.textContent !== nextLabel) label.textContent = nextLabel;
   const row = label.parentElement;
   if (!row) return;
   const value = row.querySelector("span:last-child") as HTMLElement | null;
@@ -29,12 +30,13 @@ function applyDeliveryLabels() {
   const fulfillment = /Pay upon fulfillment|Payable to courier|Not in final checkout amount/i.test(document.body.innerText);
   if (fulfillment) {
     const raw = value.textContent?.replace(/\(.*?\)/g, "").replace(/Payable to courier|Pay upon delivery/gi, "").trim() || "₱0.00";
-    value.textContent = `(${raw})`;
-    value.style.color = "#f97316";
-    value.style.fontWeight = "700";
+    const nextValue = `(${raw})`;
+    if (value.textContent !== nextValue) value.textContent = nextValue;
+    if (value.style.color !== "rgb(249, 115, 22)") value.style.color = "#f97316";
+    if (value.style.fontWeight !== "700") value.style.fontWeight = "700";
   } else {
-    value.style.color = "";
-    value.style.fontWeight = "";
+    if (value.style.color) value.style.color = "";
+    if (value.style.fontWeight) value.style.fontWeight = "";
   }
 }
 
@@ -47,7 +49,7 @@ function hideCodeErrorCopy() {
   const patterns = [/Invalid coupon or referral code/i, /This code is not available for your account/i, /This code requires a minimum subtotal/i, /Coupon or referral code is inactive/i];
   document.querySelectorAll<HTMLElement>("div,span,p").forEach((node) => {
     const text = node.textContent?.trim() || "";
-    if (patterns.some((pattern) => pattern.test(text)) && text.length < 180) node.style.display = "none";
+    if (patterns.some((pattern) => pattern.test(text)) && text.length < 180 && node.style.display !== "none") node.style.display = "none";
   });
 }
 
@@ -61,8 +63,11 @@ function applySuccessButton() {
   const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((candidate) => /View Order Tracking & Details|GO TO MY ORDERS/i.test(candidate.textContent || ""));
   if (!button) return;
   const text = button.querySelector("span");
-  if (text) text.textContent = "GO TO MY ORDERS";
-  else button.textContent = "GO TO MY ORDERS";
+  if (text) {
+    if (text.textContent !== "GO TO MY ORDERS") text.textContent = "GO TO MY ORDERS";
+  } else if (button.textContent !== "GO TO MY ORDERS") {
+    button.textContent = "GO TO MY ORDERS";
+  }
 }
 
 export default function CheckoutRuntimePatch() {
