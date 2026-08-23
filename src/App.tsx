@@ -34,6 +34,8 @@ import AdminCashflowPage from "./pages/admin/cashflow.tsx";
 import AdminSupportPage from "./pages/admin/support.tsx";
 import InstallPrompt from "./components/InstallPrompt.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import CheckoutRuntimePatch from "./components/CheckoutRuntimePatch.tsx";
+import AdminCourierConfigPanel from "./components/AdminCourierConfigPanel.tsx";
 
 function AdminGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAdmin();
@@ -50,20 +52,16 @@ function AppShell() {
     const unregister = registerMemoryCleanup({
       id: "app-shell-cleanup",
       onCleanup: () => {
-        // Clear transient caches, session storages if bloated, or cached objects
         try {
-          // Clear any stale cached temp files or image object urls
           if (typeof window !== "undefined" && window.caches) {
             window.caches.keys().then((names) => {
               names.forEach((name) => {
-                if (name.includes("temp") || name.includes("dynamic-cache")) {
-                  window.caches.delete(name);
-                }
+                if (name.includes("temp") || name.includes("dynamic-cache")) window.caches.delete(name);
               });
             });
           }
-        } catch (e) {
-          // ignore
+        } catch {
+          // ignore cleanup failures
         }
       },
     });
@@ -73,6 +71,8 @@ function AppShell() {
   return (
     <div className={`w-full min-h-[100dvh] flex flex-col justify-start overflow-x-hidden ${isAdmin ? "bg-white text-neutral-900" : "bg-[#f3f4f6] text-neutral-900"}`}>
       <div className="flex-1 w-full flex flex-col min-h-0">
+        <CheckoutRuntimePatch />
+        <AdminCourierConfigPanel />
         <Routes>
           <Route path="/" element={<Navigate to="/shop" replace />} />
           <Route path="/shop" element={<ShopLayout />}>
@@ -112,9 +112,17 @@ function AppShell() {
 
 export default function App() {
   return (
-    <TelegramProvider><CartProvider><AdminProvider>
-      <Toaster /><OrientationLock /><InstallPrompt />
-      <BrowserRouter><AppShell /></BrowserRouter>
-    </AdminProvider></CartProvider></TelegramProvider>
+    <TelegramProvider>
+      <CartProvider>
+        <AdminProvider>
+          <Toaster />
+          <OrientationLock />
+          <InstallPrompt />
+          <BrowserRouter>
+            <AppShell />
+          </BrowserRouter>
+        </AdminProvider>
+      </CartProvider>
+    </TelegramProvider>
   );
 }
