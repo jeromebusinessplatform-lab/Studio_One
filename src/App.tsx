@@ -7,7 +7,7 @@ import { Toaster } from "./components/ui/sonner.tsx";
 import GlobalProprietaryFooter from "./components/GlobalProprietaryFooter.tsx";
 import OrientationLock from "./components/OrientationLock.tsx";
 import ShopLayout from "./pages/shop/layout.tsx";
-import ShopCatalog from "./pages/shop/page.tsx";
+import ShopCatalog from "./pages/shop/catalog-with-comparison.tsx";
 import CartPage from "./pages/shop/cart.tsx";
 import CheckoutPage from "./pages/shop/checkout-hardened-v3.tsx";
 import OrderConfirmationPage from "./pages/shop/order-confirmation.tsx";
@@ -48,7 +48,14 @@ function AppShell() {
         <Routes>
           <Route path="/" element={<Navigate to="/shop" replace />} />
           <Route path="/shop" element={<ShopLayout />}>
-            <Route index element={<ShopCatalog />} /><Route path="cart" element={<CartPage />} /><Route path="checkout" element={<CheckoutPage />} /><Route path="order-confirmation/:orderId" element={<OrderConfirmationPage />} /><Route path="orders" element={<OrdersPage />} /><Route path="account" element={<AccountPage />} /><Route path="support" element={<SupportPage />} /><Route path="notifications" element={<NotificationsPage />} />
+            <Route index element={<ShopCatalog />} />
+            <Route path="cart" element={<CartPage />} />
+            <Route path="checkout" element={<CheckoutPage />} />
+            <Route path="order-confirmation/:orderId" element={<OrderConfirmationPage />} />
+            <Route path="orders" element={<OrdersPage />} />
+            <Route path="account" element={<AccountPage />} />
+            <Route path="support" element={<SupportPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
           </Route>
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminGuard><AdminLayout /></AdminGuard>}>
