@@ -43,6 +43,14 @@ function findSubtotal() {
   return node?.parentElement ? moneyToNumber(node.parentElement.textContent || "0") : 0;
 }
 
+function hideCodeErrorCopy() {
+  const patterns = [/Invalid coupon or referral code/i, /This code is not available for your account/i, /This code requires a minimum subtotal/i, /Coupon or referral code is inactive/i];
+  document.querySelectorAll<HTMLElement>("div,span,p").forEach((node) => {
+    const text = node.textContent?.trim() || "";
+    if (patterns.some((pattern) => pattern.test(text)) && text.length < 180) node.style.display = "none";
+  });
+}
+
 export default function CheckoutRuntimePatch() {
   const location = useLocation();
 
@@ -63,10 +71,7 @@ export default function CheckoutRuntimePatch() {
         if (!mid || disposed) return;
         const label = Array.from(document.querySelectorAll("span")).find((node) => node.textContent?.trim() === "PRIME MID");
         const input = label?.parentElement?.querySelector("input") as HTMLInputElement | null;
-        if (input) {
-          input.value = mid;
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-        }
+        if (input) input.value = mid;
       } catch {}
     };
 
@@ -96,6 +101,7 @@ export default function CheckoutRuntimePatch() {
           input.style.borderColor = "#dc2626";
           state.set(input, "invalid");
         }
+        hideCodeErrorCopy();
       } catch {
         if (!disposed) input.style.borderColor = "#dc2626";
       }
@@ -113,6 +119,7 @@ export default function CheckoutRuntimePatch() {
 
     const observer = new MutationObserver(() => {
       applyDeliveryLabels();
+      hideCodeErrorCopy();
       void hydratePrimeMid();
       document.querySelectorAll<HTMLInputElement>('input[placeholder="COUPON"], input[placeholder="REFERRAL"]').forEach((input) => {
         if (!state.has(input)) input.addEventListener("input", onInput);
@@ -121,7 +128,7 @@ export default function CheckoutRuntimePatch() {
 
     document.querySelectorAll<HTMLInputElement>('input[placeholder="COUPON"], input[placeholder="REFERRAL"]').forEach((input) => input.addEventListener("input", onInput));
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    const labelTimer = window.setInterval(() => { applyDeliveryLabels(); void hydratePrimeMid(); }, 500);
+    const labelTimer = window.setInterval(() => { applyDeliveryLabels(); hideCodeErrorCopy(); void hydratePrimeMid(); }, 500);
     void hydratePrimeMid();
 
     return () => {
