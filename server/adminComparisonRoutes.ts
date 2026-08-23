@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { Application, Request } from "express";
 import { firestoreService } from "./firestoreService.js";
 
@@ -14,7 +15,6 @@ function adminSession(req: Request): boolean {
   const [encoded, signature] = token.split(".");
   if (!encoded || !signature) return false;
   try {
-    const crypto = require("node:crypto") as typeof import("node:crypto");
     const payload = Buffer.from(encoded, "base64url").toString("utf8");
     const match = payload.match(/^admin:(\d+)$/);
     if (!match || Number(match[1]) < Date.now()) return false;
@@ -38,16 +38,9 @@ export function installAdminComparisonRoutes(app: Application) {
     }
     const ratingAverage = Number(body.ratingAverage);
     const ratingCount = Number(body.ratingCount);
-    if (!Number.isFinite(ratingAverage) || ratingAverage < 0 || ratingAverage > 5 || !Number.isInteger(ratingCount) || ratingCount < 0) {
-      return res.status(400).json({ error: "Invalid comparison rating configuration" });
-    }
+    if (!Number.isFinite(ratingAverage) || ratingAverage < 0 || ratingAverage > 5 || !Number.isInteger(ratingCount) || ratingCount < 0) return res.status(400).json({ error: "Invalid comparison rating configuration" });
     try {
-      const updated = await firestoreService.updateDocument("products", id, {
-        specifications: cleanSpecs,
-        ratingAverage,
-        ratingCount,
-        comparisonUpdatedAt: Date.now(),
-      });
+      const updated = await firestoreService.updateDocument("products", id, { specifications: cleanSpecs, ratingAverage, ratingCount, comparisonUpdatedAt: Date.now() });
       return res.json({ success: true, product: updated });
     } catch (error) {
       console.error("Admin comparison metadata update error:", error);
