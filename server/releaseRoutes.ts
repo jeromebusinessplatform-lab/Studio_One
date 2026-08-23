@@ -3,6 +3,7 @@ import type { Application, Request, Response } from "express";
 import { cert, getApps, initializeApp, applicationDefault } from "firebase-admin/app";
 import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { verifyTelegramInitData } from "./telegramAuth.js";
+import { installCheckoutRoutes } from "./checkoutRoutes.js";
 
 const TG_COOKIE = "prime_telegram_session";
 const TG_TTL_MS = 24 * 60 * 60 * 1000;
@@ -38,6 +39,9 @@ function setCookie(res: Response, name: string, value: string, maxAge: number) {
 function plain(id: string, data: any) { const out: any = { id, ...data }; for (const [k, v] of Object.entries(out)) if (v instanceof Timestamp || (v && typeof (v as any).toMillis === "function")) out[k] = (v as any).toMillis(); return out; }
 
 export function installReleaseRoutes(app: Application) {
+  // Register hardened checkout routes before the legacy order handler so all new checkouts are server-authoritative.
+  installCheckoutRoutes(app);
+
   app.post("/api/auth/telegram", async (req, res) => {
     try {
       const initData = typeof req.body?.initData === "string" ? req.body.initData : "";
