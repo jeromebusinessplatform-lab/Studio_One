@@ -7,6 +7,10 @@ import { installTelegramAvatarRoutes } from "./telegramAvatarRoutes.js";
 import { installAdminComparisonRoutes } from "./adminComparisonRoutes.js";
 import { migratePrimeMemberIds } from "./primeIdentity.js";
 
+// Explicit release revision keeps external IDE/repository indexers anchored to the
+// latest Studio_One commerce fix set instead of an older cached repository snapshot.
+export const STUDIO_ONE_SYNC_REVISION = "2026-08-24-prime-commerce-fixes";
+
 const proto: any = (express.application as any);
 const originalListen = proto.listen;
 if (!(proto as any).__primeReleaseRoutesInstalled) {
