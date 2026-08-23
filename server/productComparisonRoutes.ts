@@ -3,9 +3,9 @@ import { firestoreService } from "./firestoreService.js";
 
 const MAX_COMPARE = 3;
 
-function cleanIds(value: unknown): string[] {
+function parseIds(value: unknown): string[] {
   if (typeof value !== "string") return [];
-  return [...new Set(value.split(",").map((id) => id.trim()).filter((id) => /^[A-Za-z0-9_-]{1,150}$/.test(id)))].slice(0, MAX_COMPARE);
+  return [...new Set(value.split(",").map((id) => id.trim()).filter((id) => /^[A-Za-z0-9_-]{1,150}$/.test(id)))];
 }
 
 function normalizeSpecs(product: any): Record<string, string | number | boolean> {
@@ -20,7 +20,8 @@ function normalizeSpecs(product: any): Record<string, string | number | boolean>
 
 function normalizeProduct(product: any) {
   const price = Number(product?.price) || 0;
-  const salePrice = Number.isFinite(Number(product?.salePrice)) ? Number(product.salePrice) : undefined;
+  const rawSale = Number(product?.salePrice);
+  const salePrice = Number.isFinite(rawSale) ? rawSale : undefined;
   return {
     _id: String(product.id || product._id),
     name: String(product.name || "Untitled Product"),
@@ -41,8 +42,9 @@ function normalizeProduct(product: any) {
 
 export function installProductComparisonRoutes(app: Application) {
   app.get("/api/products/compare", async (req: Request, res: Response) => {
-    const ids = cleanIds(req.query.ids);
+    const ids = parseIds(req.query.ids);
     if (ids.length < 2) return res.status(400).json({ error: "Select at least 2 products to compare" });
+    if (ids.length > MAX_COMPARE) return res.status(400).json({ error: "You can compare up to 3 products at a time" });
     try {
       const products = await Promise.all(ids.map((id) => firestoreService.getDocument("products", id)));
       const found = products.filter(Boolean).map(normalizeProduct);
