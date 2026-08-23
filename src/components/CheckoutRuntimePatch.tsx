@@ -80,6 +80,7 @@ export default function CheckoutRuntimePatch() {
     const timers = new Map<HTMLInputElement, number>();
     const state = new WeakMap<HTMLInputElement, string>();
     const storageKey = "prime_checkout_codes_v1";
+    const nativeFetch = window.fetch.bind(window);
 
     const readSavedCodes = () => {
       try {
@@ -113,7 +114,7 @@ export default function CheckoutRuntimePatch() {
       const uid = uidInput?.value;
       if (!uid) return;
       try {
-        const response = await fetch(`/api/customers?userId=${encodeURIComponent(uid)}&_t=${Date.now()}`, { credentials: "same-origin", cache: "no-store" });
+        const response = await nativeFetch(`/api/customers?userId=${encodeURIComponent(uid)}&_t=${Date.now()}`, { credentials: "same-origin", cache: "no-store" });
         const data = await response.json().catch(() => ({}));
         const mid = data?.customers?.[0]?.primeMemberId;
         if (!mid || disposed) return;
@@ -134,7 +135,7 @@ export default function CheckoutRuntimePatch() {
       saveCode(kind, code);
       input.style.borderColor = "#a3a3a3";
       try {
-        const response = await fetch("/api/checkout/validate-code", {
+        const response = await nativeFetch("/api/checkout/validate-code", {
           method: "POST",
           credentials: "same-origin",
           cache: "no-store",
@@ -195,6 +196,21 @@ export default function CheckoutRuntimePatch() {
       navigate("/shop/orders");
     };
 
+    const patchedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("/api/orders") && (init?.method || "GET").toUpperCase() === "POST" && init?.body) {
+        try {
+          const body = JSON.parse(String(init.body));
+          const saved = readSavedCodes();
+          if (!body.promoCode && saved.coupon) body.promoCode = saved.coupon;
+          if (!body.referralCode && saved.referral) body.referralCode = saved.referral;
+          return nativeFetch(input, { ...init, body: JSON.stringify(body) });
+        } catch {}
+      }
+      return nativeFetch(input, init);
+    };
+    window.fetch = patchedFetch as typeof window.fetch;
+
     const bindCodeInputs = () => {
       document.querySelectorAll<HTMLInputElement>('input[placeholder="COUPON"], input[placeholder="REFERRAL"]').forEach((input) => {
         if (!state.has(input)) input.addEventListener("input", onInput);
@@ -229,6 +245,7 @@ export default function CheckoutRuntimePatch() {
       document.removeEventListener("keydown", onCodeKeyDown, true);
       document.removeEventListener("click", onSuccessOrderClick, true);
       document.querySelectorAll<HTMLInputElement>('input[placeholder="COUPON"], input[placeholder="REFERRAL"]').forEach((input) => input.removeEventListener("input", onInput));
+      window.fetch = nativeFetch;
     };
   }, [location.pathname, navigate]);
 
