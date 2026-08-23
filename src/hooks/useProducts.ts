@@ -41,10 +41,6 @@ export function useProducts() {
             setCategories(INITIAL_CATEGORIES);
           }
         } else {
-          // Initialize if missing
-          setDoc(categoriesRef, { list: INITIAL_CATEGORIES }).catch((e) =>
-            console.error("Initialize categories error:", e)
-          );
           setCategories(INITIAL_CATEGORIES);
         }
       },

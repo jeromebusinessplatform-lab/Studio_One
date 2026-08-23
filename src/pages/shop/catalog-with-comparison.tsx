@@ -37,6 +37,7 @@ function ProductCard({ product, compareSelected, onToggleCompare }: ProductCardP
   const cartItem = items.find((item) => item.productId === product._id);
   const [showQuantity, setShowQuantity] = useState(Boolean(cartItem));
   const [qty, setQty] = useState(cartItem?.quantity ?? 1);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const unitPrice = product.salePrice ?? product.price;
   const outOfStock = product.stock <= 0 || product.available === false;
 
@@ -60,10 +61,24 @@ function ProductCard({ product, compareSelected, onToggleCompare }: ProductCardP
   };
 
   return (
-    <div className={`relative bg-white rounded-2xl border overflow-hidden flex flex-col shadow-xs transition-all ${compareSelected ? "border-black ring-2 ring-black/10" : "border-neutral-200/90"} ${outOfStock ? "opacity-60" : ""}`}>
+    <div className={`relative bg-white rounded-2xl border overflow-hidden flex flex-col shadow-xs transition-all h-full ${compareSelected ? "border-black ring-2 ring-black/10" : "border-neutral-200/90"} ${outOfStock ? "opacity-60" : ""}`}>
       <div className="relative aspect-square bg-white flex items-center justify-center p-2.5">
         {product.image ? (
-          <img src={product.image} alt={product.name} loading="lazy" referrerPolicy="no-referrer" className="w-full h-full object-contain" />
+          <>
+            {!imageLoaded && (
+              <div className="absolute inset-0 bg-neutral-100/90 animate-pulse flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-neutral-200/70" />
+              </div>
+            )}
+            <img
+              src={product.image}
+              alt={product.name}
+              onLoad={() => setImageLoaded(true)}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              className={`w-full h-full object-contain transition-opacity duration-300 ${imageLoaded ? "opacity-100" : "opacity-0"}`}
+            />
+          </>
         ) : (
           <ShoppingCart size={30} className="text-neutral-300" />
         )}

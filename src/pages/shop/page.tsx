@@ -42,6 +42,7 @@ function ProductCard({ product, allProducts }: { product: Product; allProducts?:
   const [showQuantity, setShowQuantity] = useState(!!cartItem);
   const [showReviewsDrawer, setShowReviewsDrawer] = useState(false);
   const [showBundleDrawer, setShowBundleDrawer] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const [localQty, setLocalQty] = useState<number>(() => {
     if (cartItem) return cartItem.quantity;
     return 1;
@@ -89,20 +90,28 @@ function ProductCard({ product, allProducts }: { product: Product; allProducts?:
 
   return (
     <div
-      className={`bg-white rounded-2xl border transition-all duration-200 flex flex-col justify-between overflow-hidden shadow-xs hover:shadow-md ${
+      className={`bg-white rounded-2xl border transition-all duration-200 flex flex-col justify-between overflow-hidden shadow-xs hover:shadow-md h-full ${
         isOutOfStock ? "opacity-60 border-neutral-200" : product.isCombination ? "border-amber-300 ring-1 ring-amber-200/60" : "border-neutral-200/90"
       }`}
     >
       {/* Product Image & Badge Area */}
       <div className="relative aspect-square w-full bg-white flex items-center justify-center p-2.5 overflow-hidden">
         {product.image ? (
-          <img
-            src={product.image}
-            alt={product.name}
-            className="w-full h-full object-contain filter drop-shadow-sm transition-transform duration-300 hover:scale-105"
-            loading="lazy"
-            referrerPolicy="no-referrer"
-          />
+          <>
+            {!imageLoaded && (
+              <div className="absolute inset-0 bg-neutral-100/90 animate-pulse flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-neutral-200/70" />
+              </div>
+            )}
+            <img
+              src={product.image}
+              alt={product.name}
+              onLoad={() => setImageLoaded(true)}
+              className={`w-full h-full object-contain filter drop-shadow-sm transition-all duration-300 hover:scale-105 ${imageLoaded ? "opacity-100" : "opacity-0"}`}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center text-neutral-300">
             <ShoppingCart size={32} />
@@ -146,20 +155,18 @@ function ProductCard({ product, allProducts }: { product: Product; allProducts?:
       <div className="p-2 flex flex-col flex-1 justify-between pt-0 space-y-1">
         <div>
           <h3
-            className="text-neutral-900 font-normal leading-tight line-clamp-1"
+            className="text-neutral-900 font-normal leading-tight line-clamp-1 text-[12.5px] sm:text-[13.5px]"
             style={{
               fontFamily: "'Roboto Condensed', sans-serif",
-              fontSize: "13.5px",
             }}
           >
             {product.name}
           </h3>
           {product.subname && (
             <p
-              className="text-neutral-500 leading-tight mt-0.5 line-clamp-1 font-normal"
+              className="text-neutral-500 leading-tight mt-0.5 line-clamp-1 font-normal text-[11px] sm:text-[12px]"
               style={{
                 fontFamily: "'Ubuntu', sans-serif",
-                fontSize: "12px",
               }}
             >
               {product.subname}
@@ -199,20 +206,18 @@ function ProductCard({ product, allProducts }: { product: Product; allProducts?:
           {/* Pricing */}
           <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
             <span
-              className="text-black font-normal"
+              className="text-black font-normal text-[15px] sm:text-[17px]"
               style={{
                 fontFamily: "'Ubuntu', sans-serif",
-                fontSize: "17px",
               }}
             >
               {formatCurrency(unitPrice)}
             </span>
             {product.salePrice && !product.isCombination && (
               <span
-                className="text-[#ef4444] font-normal line-through"
+                className="text-[#ef4444] font-normal line-through text-[10px] sm:text-[11px]"
                 style={{
                   fontFamily: "'Ubuntu', sans-serif",
-                  fontSize: "11px",
                 }}
               >
                 {formatCurrency(product.price)}
@@ -655,7 +660,7 @@ export default function ShopCatalog() {
           </div>
         ) : (
           <motion.div
-            className="grid grid-cols-3 gap-2 sm:gap-2.5"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3"
             initial="hidden"
             animate="visible"
             variants={{

@@ -55,7 +55,7 @@ export function ProductGridSkeleton({ count = 6 }: { count?: number }) {
     <div
       role="status"
       aria-label="Loading products"
-      className="grid grid-cols-3 gap-2 sm:gap-2.5"
+      className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3"
     >
       {Array.from({ length: count }).map((_, i) => (
         <ProductCardSkeleton key={i} index={i} />
