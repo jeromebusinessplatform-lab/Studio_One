@@ -10,6 +10,7 @@ import { type Product, isBadgeActive } from "@/data/products.ts";
 import { formatCurrency } from "@/lib/utils.ts";
 import { ProductGridSkeleton } from "@/components/ProductCardSkeleton.tsx";
 import ProductComparison from "@/components/ProductComparison.tsx";
+import { ImageWithBlur } from "@/components/ui/ImageWithBlur.tsx";
 
 type FilterOption = "all" | "in_stock" | "sale" | "new" | "low_stock" | "price_asc" | "price_desc";
 const FILTER_LABELS: Record<FilterOption, string> = {
@@ -37,7 +38,6 @@ function ProductCard({ product, compareSelected, onToggleCompare }: ProductCardP
   const cartItem = items.find((item) => item.productId === product._id);
   const [showQuantity, setShowQuantity] = useState(Boolean(cartItem));
   const [qty, setQty] = useState(cartItem?.quantity ?? 1);
-  const [imageLoaded, setImageLoaded] = useState(false);
   const unitPrice = product.salePrice ?? product.price;
   const outOfStock = product.stock <= 0 || product.available === false;
 
@@ -64,23 +64,14 @@ function ProductCard({ product, compareSelected, onToggleCompare }: ProductCardP
     <div className={`relative bg-white rounded-2xl border overflow-hidden flex flex-col shadow-xs transition-all h-full ${compareSelected ? "border-black ring-2 ring-black/10" : "border-neutral-200/90"} ${outOfStock ? "opacity-60" : ""}`}>
       <div className="relative aspect-square bg-white flex items-center justify-center p-2.5">
         {product.image ? (
-          <>
-            {!imageLoaded && (
-              <div className="absolute inset-0 bg-neutral-100/90 animate-pulse flex items-center justify-center">
-                <div className="w-8 h-8 rounded-lg bg-neutral-200/70" />
-              </div>
-            )}
-            <img
-              src={product.image}
-              alt={product.name}
-              onLoad={() => setImageLoaded(true)}
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              className={`w-full h-full object-contain transition-opacity duration-300 ${imageLoaded ? "opacity-100" : "opacity-0"}`}
-            />
-          </>
+          <ImageWithBlur
+            src={product.image}
+            alt={product.name}
+            containerClassName="absolute inset-0 w-full h-full"
+            className="object-contain p-2"
+          />
         ) : (
-          <ShoppingCart size={30} className="text-neutral-300" />
+          <ShoppingCart size={30} className="text-neutral-300 relative z-10" />
         )}
         {product.badge && isBadgeActive(product.badge, product.badgeExpiry) && !outOfStock && (
           <span className="absolute top-2 left-2 bg-black text-white px-2 py-0.5 rounded-full text-[9px] uppercase">

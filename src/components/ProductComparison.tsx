@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { X, Star, Loader2, Scale, ArrowRight } from "lucide-react";
 import type { Product } from "@/data/products.ts";
 import { formatCurrency } from "@/lib/utils.ts";
+import { ImageWithBlur } from "@/components/ui/ImageWithBlur.tsx";
 import { toast } from "sonner";
 
 type ComparisonProduct = Product & {
@@ -90,8 +91,17 @@ export default function ProductComparison({ products, onClose }: ProductComparis
                 const price = product.salePrice ?? product.price;
                 return (
                   <div key={product._id} className="border border-neutral-200 rounded-xl p-3 bg-white shadow-sm">
-                    <div className="aspect-[4/3] rounded-lg bg-neutral-50 border border-neutral-100 flex items-center justify-center overflow-hidden mb-2">
-                      {product.image ? <img src={product.image} alt={product.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" /> : <Scale size={24} className="text-neutral-300" />}
+                    <div className="aspect-[4/3] rounded-lg bg-neutral-50 border border-neutral-100 flex items-center justify-center overflow-hidden mb-2 relative group">
+                      {product.image ? (
+                        <ImageWithBlur
+                          src={product.image}
+                          alt={product.name}
+                          containerClassName="absolute inset-0 w-full h-full"
+                          className="object-contain p-1 filter drop-shadow-sm transition-transform duration-500 group-hover:scale-105"
+                        />
+                      ) : (
+                        <Scale size={24} className="text-neutral-300 relative z-10" />
+                      )}
                     </div>
                     <div className="font-semibold text-sm leading-tight line-clamp-2">{product.name}</div>
                     <div className="text-[11px] text-neutral-500 mt-0.5">{product.category || "Uncategorized"}</div>

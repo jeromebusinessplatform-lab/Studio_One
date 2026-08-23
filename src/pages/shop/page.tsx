@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils.ts";
 import { ProductGridSkeleton } from "@/components/ProductCardSkeleton.tsx";
 import { StarRating } from "@/components/StarRating.tsx";
+import { ImageWithBlur } from "@/components/ui/ImageWithBlur.tsx";
 import { motion } from "motion/react";
 
 function BadgePill({ badge }: { badge: "NEW" | "SALE" | "LOW_STOCK" }) {
@@ -42,7 +43,6 @@ function ProductCard({ product, allProducts }: { product: Product; allProducts?:
   const [showQuantity, setShowQuantity] = useState(!!cartItem);
   const [showReviewsDrawer, setShowReviewsDrawer] = useState(false);
   const [showBundleDrawer, setShowBundleDrawer] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
   const [localQty, setLocalQty] = useState<number>(() => {
     if (cartItem) return cartItem.quantity;
     return 1;
@@ -95,25 +95,16 @@ function ProductCard({ product, allProducts }: { product: Product; allProducts?:
       }`}
     >
       {/* Product Image & Badge Area */}
-      <div className="relative aspect-square w-full bg-white flex items-center justify-center p-2.5 overflow-hidden">
+      <div className="relative aspect-square w-full bg-white flex items-center justify-center p-2.5 overflow-hidden group">
         {product.image ? (
-          <>
-            {!imageLoaded && (
-              <div className="absolute inset-0 bg-neutral-100/90 animate-pulse flex items-center justify-center">
-                <div className="w-8 h-8 rounded-lg bg-neutral-200/70" />
-              </div>
-            )}
-            <img
-              src={product.image}
-              alt={product.name}
-              onLoad={() => setImageLoaded(true)}
-              className={`w-full h-full object-contain filter drop-shadow-sm transition-all duration-300 hover:scale-105 ${imageLoaded ? "opacity-100" : "opacity-0"}`}
-              loading="lazy"
-              referrerPolicy="no-referrer"
-            />
-          </>
+          <ImageWithBlur
+            src={product.image}
+            alt={product.name}
+            containerClassName="absolute inset-0 w-full h-full"
+            className="object-contain p-2 filter drop-shadow-sm transition-transform duration-500 group-hover:scale-105"
+          />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-neutral-300">
+          <div className="w-full h-full flex items-center justify-center text-neutral-300 relative z-10">
             <ShoppingCart size={32} />
           </div>
         )}

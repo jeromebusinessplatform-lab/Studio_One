@@ -13,7 +13,7 @@ const FALLBACK_COURIERS: Record<string, any> = {
 
 type PaymentMethod = "TELEGRAM_PAY" | "DIRECT_TRANSFER";
 type DeliveryPaymentOption = "PAY_AT_CHECKOUT" | "PAY_UPON_FULFILLMENT";
-type AppliedPromo = { code: string; freeDelivery: boolean };
+type AppliedPromo = { code: string; freeDelivery: boolean; discount: number; referrerId?: string };
 
 function cookie(req: Request, name: string) {
   const value = req.headers.cookie || "";
@@ -87,6 +87,13 @@ async function resolvePromoOrReferral(telegramId: string, rawCoupon: unknown, ra
     const referrals = await firestoreService.getDocuments("referrals");
     promo = referrals.find((r: any) => r.code?.toUpperCase() === code);
   }
+  if (!promo) {
+    const customers = await firestoreService.getDocuments("customers");
+    const foundCustomer = customers.find((c: any) => c.primeMemberId?.toUpperCase() === code || c.telegramUserId?.toUpperCase() === code);
+    if (foundCustomer) {
+      promo = { code, type: "fixed", value: 50, minSubtotal: 0, active: true, freeDelivery: false, isReferral: true, referrerId: foundCustomer.telegramUserId };
+    }
+  }
 
   if (!promo) throw new Error("Coupon or referral code is invalid or unavailable");
   if (promo.active === false) throw new Error("Coupon or referral code is inactive");
@@ -97,7 +104,15 @@ async function resolvePromoOrReferral(telegramId: string, rawCoupon: unknown, ra
   const minSubtotal = number(promo.minSubtotal, 0);
   if (subtotal < minSubtotal) throw new Error(`This code requires a minimum subtotal of PHP ${minSubtotal.toFixed(2)}`);
 
-  return { code, freeDelivery: Boolean(freeDelivery) };
+  let discount = 0;
+  const val = number(promo.value, 0);
+  if (promo.type === "percent" || (val <= 100 && promo.type === "percent")) {
+    discount = roundMoney(subtotal * val / 100);
+  } else if (val > 0) {
+    discount = roundMoney(Math.min(subtotal, val));
+  }
+
+  return { code, freeDelivery: Boolean(freeDelivery), discount, referrerId: promo.referrerId };
 }
 
 async function buildQuote(input: any, telegramId: string) {
@@ -133,6 +148,8 @@ async function buildQuote(input: any, telegramId: string) {
     promoError = err?.message || "Invalid coupon or referral code";
     promo = null;
   }
+  const discount = promo?.discount ?? 0;
+  const discountedSubtotal = roundMoney(Math.max(0, subtotal - discount));
   const deliveryCharge = promo?.freeDelivery ? 0 : calculateCourierCharge(courier, distanceKm);
   const deliveryPaymentOption: DeliveryPaymentOption = input.deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? "PAY_UPON_FULFILLMENT" : "PAY_AT_CHECKOUT";
   const deliveryDueNow = deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? 0 : deliveryCharge;
@@ -141,12 +158,12 @@ async function buildQuote(input: any, telegramId: string) {
   const charges = roundMoney(chargesList.reduce((sum, charge) => {
     if (charge.active !== true) return sum;
     const amount = number(charge.amount);
-    return sum + (charge.type === "percent" ? subtotal * amount / 100 : amount);
+    return sum + (charge.type === "percent" ? discountedSubtotal * amount / 100 : amount);
   }, 0));
-  const tax = roundMoney((subtotal + charges) * TAX_RATE);
-  const total = roundMoney(subtotal + charges + tax + deliveryDueNow);
-  const fulfillmentTotal = roundMoney(subtotal + charges + tax + deliveryCharge);
-  return { items, normalizedItems, subtotal, charges, tax, deliveryCharge, deliveryDueNow, fulfillmentTotal, total, courier: { id: courier.id || courierId, name: String(courier.name || "Delivery Provider") }, distanceKm, deliveryPaymentOption, promo, promoError };
+  const tax = roundMoney((discountedSubtotal + charges) * TAX_RATE);
+  const total = roundMoney(discountedSubtotal + charges + tax + deliveryDueNow);
+  const fulfillmentTotal = roundMoney(discountedSubtotal + charges + tax + deliveryCharge);
+  return { items, normalizedItems, subtotal, discount, charges, tax, deliveryCharge, deliveryDueNow, fulfillmentTotal, total, courier: { id: courier.id || courierId, name: String(courier.name || "Delivery Provider") }, distanceKm, deliveryPaymentOption, promo, promoError };
 }
 
 function setTelegramSession(res: Response, userId: string) {
@@ -216,14 +233,52 @@ export function installCheckoutRoutes(app: Application) {
         });
       }
 
+      const primeMemberId = `PC${tg.slice(0, 8).toUpperCase()}`;
+      const existingCustomer = (await firestoreService.getDocument("customers", tg)) || {};
+      const orderCount = number(existingCustomer.orderCount, 0) + 1;
+      const totalSpending = roundMoney(number(existingCustomer.totalSpending, 0) + quote.total);
+      const discountSaved = quote.discount || 0;
+      const totalDiscounts = roundMoney(number(existingCustomer.totalDiscounts, 0) + discountSaved);
+      const appliedDiscounts = quote.promo?.code ? [
+        { code: quote.promo.code, amountSaved: discountSaved, orderNumber, date: now },
+        ...(Array.isArray(existingCustomer.appliedDiscounts) ? existingCustomer.appliedDiscounts : [])
+      ] : (Array.isArray(existingCustomer.appliedDiscounts) ? existingCustomer.appliedDiscounts : []);
+
+      let vipTier = "Bronze";
+      if (totalSpending >= 30000) vipTier = "Platinum";
+      else if (totalSpending >= 15000) vipTier = "Gold";
+      else if (totalSpending >= 5000) vipTier = "Silver";
+
+      let referredBy = existingCustomer.referredBy || null;
+      if (!referredBy && quote.promo?.referrerId && quote.promo.referrerId !== tg) {
+        referredBy = quote.promo.referrerId;
+        const referrerRecord = await firestoreService.getDocument("customers", referredBy);
+        if (referrerRecord) {
+          const referees = Array.isArray(referrerRecord.referees) ? referrerRecord.referees : [];
+          if (!referees.includes(tg)) {
+            referees.push(tg);
+            await firestoreService.updateDocument("customers", referredBy, {
+              referees,
+              referrals: referees.length,
+              updatedAt: now,
+            });
+          }
+        }
+      }
+
       await firestoreService.setDocument("customers", tg, {
         id: tg,
         telegramUserId: tg,
         telegramDisplayName: String(input.telegramDisplayName || receiverName).slice(0, 120),
         telegramUsername: input.telegramUsername ? String(input.telegramUsername).slice(0, 64) : null,
-        primeMemberId: `PC${tg.slice(0, 8).toUpperCase()}`,
+        primeMemberId,
         lastDeliveryAddress: deliveryAddress,
-        vipTier: "Bronze",
+        vipTier,
+        orderCount,
+        totalSpending,
+        totalDiscounts,
+        appliedDiscounts,
+        referredBy,
         updatedAt: now,
       }, true);
 
@@ -232,11 +287,11 @@ export function installCheckoutRoutes(app: Application) {
         telegramUserId: tg,
         telegramDisplayName: String(input.telegramDisplayName || receiverName).slice(0, 120),
         telegramUsername: input.telegramUsername ? String(input.telegramUsername).slice(0, 64) : null,
-        primeMemberId: `PC${tg.slice(0, 8).toUpperCase()}`,
+        primeMemberId,
         orderNumber,
         items: quote.normalizedItems.map(({ stock, ...item }) => item),
         subtotal: quote.subtotal,
-        discount: 0,
+        discount: quote.discount,
         charges: quote.charges,
         tax: quote.tax,
         deliveryFee: quote.deliveryCharge,

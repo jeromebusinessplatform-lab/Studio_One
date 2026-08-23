@@ -76,6 +76,22 @@ export default function AdminDiscountsPage() {
     setMinSubtotal(String(preset.minSubtotal));
   };
 
+  const generateRandomPromo = () => {
+    const prefixes = ["PRIME", "SAVE", "FLASH", "VIP", "MEGA", "PRO", "DEAL"];
+    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const num = Math.floor(10 + Math.random() * 90);
+    const randomCode = `${prefix}${num}`;
+    const randomValue = Math.random() > 0.5 ? 15 : 100;
+    const randomType = randomValue <= 30 ? "percent" : "fixed";
+    const randomMin = randomType === "percent" ? 500 : 1200;
+
+    setCode(randomCode);
+    setValue(String(randomValue));
+    setType(randomType);
+    setMinSubtotal(String(randomMin));
+    toast.success(`Generated random code: ${randomCode}`);
+  };
+
   const toggle = async (discount: Discount) => {
     const response = await fetch(`/api/admin/discounts/${discount.id}`, {
       method: "PATCH",
@@ -130,7 +146,16 @@ export default function AdminDiscountsPage() {
 
       {/* Preset Quick Fill */}
       <div className="space-y-1">
-        <span className="text-[10px] uppercase text-neutral-500 font-bold">Quick Templates:</span>
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] uppercase text-neutral-500 font-bold">Quick Templates:</span>
+          <button
+            type="button"
+            onClick={generateRandomPromo}
+            className="text-[11px] font-bold bg-black text-white px-2.5 py-1 rounded-lg flex items-center gap-1 hover:bg-neutral-800 transition"
+          >
+            <Sparkles size={12} /> Generate Random Promo Code
+          </button>
+        </div>
         <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
           {PROMO_PRESETS.map((p, i) => (
             <button

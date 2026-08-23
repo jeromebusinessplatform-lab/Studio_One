@@ -35,6 +35,7 @@ type PaymentMethod = "TELEGRAM_PAY" | "DIRECT_TRANSFER";
 
 type Quote = {
   subtotal: number;
+  discount?: number;
   charges: number;
   tax: number;
   deliveryCharge: number;
@@ -143,7 +144,8 @@ export default function CheckoutPage() {
   const routeReady = Boolean(routeInfo) && !isCalculatingRoute;
   const fallbackShipping = selectedCourier ? calculateDeliveryCharge(selectedCourier, distanceKm) : 0;
   const fallbackTax = Math.round(subtotalNow * 0.05 * 100) / 100;
-  const payable = quote?.total ?? subtotalNow + fallbackTax + (deliveryPaymentOption === "PAY_AT_CHECKOUT" ? fallbackShipping : 0);
+  const discountAmount = quote?.discount ?? 0;
+  const payable = quote?.total ?? Math.max(0, subtotalNow - discountAmount) + fallbackTax + (deliveryPaymentOption === "PAY_AT_CHECKOUT" ? fallbackShipping : 0);
   const quoteKey = `${itemsKey}|${courierId}|${distanceKm.toFixed(3)}|${deliveryPaymentOption}|${promoCode.trim().toUpperCase()}|${referralCode.trim().toUpperCase()}`;
 
   useEffect(() => {
@@ -768,6 +770,14 @@ export default function CheckoutPage() {
                     <AlertCircle size={12} /> {quoteError}
                   </div>
                 )}
+                {quote?.promoCode && (
+                  <div className="text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-800 p-2 rounded-xl font-semibold flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Check size={13} className="text-emerald-600" /> Promo / Referral Applied: <span className="font-mono uppercase">{quote.promoCode}</span>
+                    </span>
+                    {Boolean(quote.discount) && <span className="font-mono font-bold">-{formatCurrency(quote.discount)}</span>}
+                  </div>
+                )}
                 {quote?.freeDelivery && (
                   <div className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
                     <Check size={12} /> Free Delivery Applied ({quote.promoCode})
@@ -777,6 +787,9 @@ export default function CheckoutPage() {
 
               <div className="pt-2.5 mt-2.5 border-t border-neutral-100 space-y-1 text-xs">
                 <Line label="Items Subtotal" value={formatCurrency(quote?.subtotal ?? subtotalNow)} />
+                {Boolean(quote?.discount) && (
+                  <Line label={`Discount (${quote?.promoCode || "PROMO"})`} value={`-${formatCurrency(quote?.discount ?? 0)}`} className="text-emerald-700 font-semibold" />
+                )}
                 {Boolean(quote?.charges) && <Line label="Service Charges" value={formatCurrency(quote?.charges ?? 0)} />}
                 <Line label="Tax (5%)" value={formatCurrency(quote?.tax ?? fallbackTax)} />
                 <Line
@@ -1005,9 +1018,9 @@ function Summary({
   );
 }
 
-function Line({ label, value }: { label: string; value: string }) {
+function Line({ label, value, className = "" }: { label: string; value: string; className?: string }) {
   return (
-    <div className="flex justify-between text-neutral-600">
+    <div className={`flex justify-between text-neutral-600 ${className}`}>
       <span>{label}</span>
       <span className="font-semibold text-neutral-900 font-mono">{value}</span>
     </div>

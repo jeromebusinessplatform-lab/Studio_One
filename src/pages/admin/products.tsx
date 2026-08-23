@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
+import Barcode from "react-barcode";
 import { useProducts } from "@/hooks/useProducts.ts";
 import { ProductListSkeleton } from "@/components/admin/ProductListSkeleton.tsx";
 import { AdminOverlayLoader } from "@/components/admin/AdminOverlayLoader.tsx";
@@ -22,11 +23,13 @@ import {
   XCircle,
   Eye,
   EyeOff,
+  ScanLine,
 } from "lucide-react";
 import { type Product, type BundleItemConfig, isBadgeActive } from "@/data/products.ts";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils.ts";
 import { CategoryManagerModal } from "@/components/admin/CategoryManagerModal.tsx";
+import { BarcodeScanner } from "@/components/admin/BarcodeScanner.tsx";
 import { ProductImageUploader } from "@/components/admin/ProductImageUploader.tsx";
 import { ProductBundleManager } from "@/components/admin/ProductBundleManager.tsx";
 import { ProductBadgeSelector } from "@/components/admin/ProductBadgeSelector.tsx";
@@ -86,7 +89,56 @@ export default function AdminProductsPage() {
     isCombination: false,
     bundleItems: [] as BundleItemConfig[],
     allowComparison: true,
+    sku: "",
   });
+
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const [showCameraScanner, setShowCameraScanner] = useState(false);
+
+  // Focus scanner input on mount if not in a form
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If we're not typing in an input/textarea and it's a character, focus the scanner
+      if (!showForm && !showCategoryModal && !showBatchCategoryDialog && !showBatchBadgeDialog && !showCameraScanner) {
+        if (
+          document.activeElement?.tagName !== "INPUT" &&
+          document.activeElement?.tagName !== "TEXTAREA"
+        ) {
+          if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            barcodeInputRef.current?.focus();
+          }
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showForm, showCategoryModal, showBatchCategoryDialog, showBatchBadgeDialog, showCameraScanner]);
+
+  const handleBarcodeScan = (e: React.FormEvent) => {
+    e.preventDefault();
+    processBarcodeScan(barcodeInput.trim());
+  };
+
+  const processBarcodeScan = (scanned: string) => {
+    if (!scanned) return;
+
+    // Search for product with this SKU
+    const foundProduct = products.find(p => p.sku === scanned || p._id === scanned);
+    if (foundProduct) {
+      toast.success(`Scanned: ${foundProduct.name}`);
+      handleOpenEdit(foundProduct);
+      setShowCameraScanner(false);
+    } else {
+      toast.error(`No product found with SKU/Barcode: ${scanned}`);
+    }
+    setBarcodeInput("");
+    barcodeInputRef.current?.blur();
+  };
+
+  const handleCameraScanSuccess = (decodedText: string) => {
+    processBarcodeScan(decodedText);
+  };
 
   // Calculate Product count per Category
   const productCountsByCategory = useMemo(() => {
@@ -122,6 +174,7 @@ export default function AdminProductsPage() {
       isCombination: false,
       bundleItems: [],
       allowComparison: true,
+      sku: "",
     });
     setShowForm(true);
   };
@@ -143,6 +196,7 @@ export default function AdminProductsPage() {
       isCombination: !!p.isCombination,
       bundleItems: p.bundleItems ?? [],
       allowComparison: p.allowComparison !== false,
+      sku: p.sku ?? "",
     });
     setShowForm(true);
   };
@@ -185,6 +239,7 @@ export default function AdminProductsPage() {
       bundleItems: formData.isCombination ? formData.bundleItems : undefined,
       bundleCalculatedPrice: formData.isCombination ? finalPrice : undefined,
       allowComparison: formData.allowComparison,
+      sku: formData.sku.trim() || undefined,
     };
 
     setSavingProduct(true);
@@ -404,11 +459,28 @@ export default function AdminProductsPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 self-end sm:self-auto">
+        <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap justify-end">
+          <form onSubmit={handleBarcodeScan} className="flex-1 min-w-[200px] relative">
+            <input
+              ref={barcodeInputRef}
+              type="text"
+              placeholder="Scan Barcode / SKU..."
+              value={barcodeInput}
+              onChange={(e) => setBarcodeInput(e.target.value)}
+              className="w-full min-h-[46.5px] bg-white border border-neutral-300 rounded-xl pl-3 pr-10 text-xs outline-none focus:border-black font-mono"
+            />
+            <button
+              type="button"
+              onClick={() => setShowCameraScanner(true)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-neutral-400 hover:text-black hover:bg-neutral-100 rounded-lg transition"
+            >
+              <ScanLine size={16} />
+            </button>
+          </form>
           <button
             onClick={() => setShowCategoryModal(true)}
             className="min-h-[46.5px] h-[46.5px] bg-white hover:bg-neutral-50 border border-neutral-300 text-neutral-800 px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs font-normal transition-colors"
-            style={{ fontFamily: "'Ubuntu', sans-serif" }}
+            style={{ fontFamily: "'Samsung One', 'Inter', sans-serif" }}
           >
             <FolderCog size={14} className="text-neutral-600" /> Categories ({categories.length})
           </button>
@@ -416,7 +488,7 @@ export default function AdminProductsPage() {
           <button
             onClick={handleOpenAdd}
             className="min-h-[46.5px] h-[46.5px] bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs font-normal transition-colors"
-            style={{ fontFamily: "'Ubuntu', sans-serif" }}
+            style={{ fontFamily: "'Samsung One', 'Inter', sans-serif" }}
           >
             <Plus size={15} /> Add Product
           </button>
@@ -782,7 +854,17 @@ export default function AdminProductsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-700">SKU / Barcode</label>
+                  <input
+                    type="text"
+                    value={formData.sku || ""}
+                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                    placeholder="e.g. WH1000XM5-BLK"
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-black font-mono"
+                  />
+                </div>
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium text-neutral-700">Category *</label>
                   <select
@@ -1139,6 +1221,18 @@ export default function AdminProductsPage() {
                   )}
                 </div>
 
+                {/* SKU / Barcode Display */}
+                {(product.sku || product._id) && (
+                  <div className="pt-2 border-t border-neutral-100 flex items-center justify-between">
+                    <div className="text-[10px] text-neutral-500 font-mono">
+                      SKU: <span className="font-bold text-neutral-800">{product.sku || "N/A"}</span>
+                    </div>
+                    <div className="h-8 overflow-hidden flex items-center justify-end opacity-70 hover:opacity-100 transition grayscale">
+                      <Barcode value={product.sku || product._id} width={1} height={24} displayValue={false} background="transparent" margin={0} />
+                    </div>
+                  </div>
+                )}
+
                 {/* Bottom Section: 48px Minimum Touch Target Action Controls */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-neutral-100">
                   {/* Quick Stock Controls (48px Touch Steppers) */}
@@ -1233,6 +1327,36 @@ export default function AdminProductsPage() {
         onClose={() => setViewingBundleProduct(null)}
         onEditProduct={(p) => handleOpenEdit(p)}
       />
+
+      {/* Camera Barcode Scanner Modal */}
+      {showCameraScanner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col"
+          >
+            <div className="flex items-center justify-between p-4 border-b border-neutral-100">
+              <h3 className="font-bold text-sm">Scan Product Barcode</h3>
+              <button
+                onClick={() => setShowCameraScanner(false)}
+                className="p-1 hover:bg-neutral-100 rounded-lg text-neutral-500"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-4">
+              <BarcodeScanner
+                onScanSuccess={handleCameraScanSuccess}
+                onScanFailure={() => {}}
+              />
+              <p className="text-center text-xs text-neutral-500 mt-4">
+                Point your camera at a product barcode to automatically open it.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

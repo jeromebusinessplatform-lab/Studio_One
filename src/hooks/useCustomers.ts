@@ -7,8 +7,8 @@ export interface Customer {
   telegramUserId: string;
   telegramDisplayName: string;
   telegramUsername?: string;
-  avatarUrl?: string; // Add this
-  manualAvatarOverride?: boolean; // Add this
+  avatarUrl?: string;
+  manualAvatarOverride?: boolean;
   primeMemberId: string;
   vipTier: VipTier;
   points: number;
@@ -16,6 +16,10 @@ export interface Customer {
   memberSince: number;
   referrals: number;
   totalSpending: number;
+  totalDiscounts?: number;
+  appliedDiscounts?: Array<{ code: string; amountSaved: number; orderNumber: string; date: number }>;
+  referees?: string[];
+  referredBy?: string | null;
   orderCount: number;
   lastOrderAt?: number;
 }
@@ -47,6 +51,10 @@ export function useCustomers() {
               memberSince: Number(d.memberSince || Date.now()),
               referrals: Number(d.referrals || 0),
               totalSpending: Number(d.totalSpending || 0),
+              totalDiscounts: Number(d.totalDiscounts || 0),
+              appliedDiscounts: Array.isArray(d.appliedDiscounts) ? d.appliedDiscounts : [],
+              referees: Array.isArray(d.referees) ? d.referees : [],
+              referredBy: d.referredBy ? String(d.referredBy) : null,
               orderCount: Number(d.orderCount || 0),
               lastOrderAt: d.lastOrderAt ? Number(d.lastOrderAt) : undefined,
             };

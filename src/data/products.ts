@@ -26,6 +26,7 @@ export interface Product {
   ratingAverage?: number;
   ratingCount?: number;
   allowComparison?: boolean;
+  sku?: string;
 
   // Combination / Bundle configuration
   isCombination?: boolean;

@@ -58,7 +58,7 @@ export default function AccountPage() {
   if (!isTelegramEnv || !customer) return <div className="min-h-[60vh] flex items-center justify-center p-6 text-center"><div><div className="font-bold text-lg">ACCOUNT UNAVAILABLE</div><p className="text-sm text-neutral-500 mt-2">Open PRIME from Telegram to access your customer account.</p>{telegramError && <p className="text-xs text-neutral-400 mt-2">{telegramError}</p>}</div></div>;
 
   const customerRecord = customers.find((c) => c.telegramUserId === customer.telegramUserId);
-  const customerData = customerRecord || { id: customer.telegramUserId, telegramUserId: customer.telegramUserId, telegramDisplayName: customer.telegramDisplayName, telegramUsername: customer.telegramUsername, primeMemberId: `PC${customer.telegramUserId.slice(0, 8).toUpperCase()}`, vipTier: "Bronze" as const, points: 0, memberSince: Date.now(), referrals: 0, totalSpending: 0, orderCount: 0, avatarUrl: customer.avatarUrl };
+  const customerData = customerRecord || { id: customer.telegramUserId, telegramUserId: customer.telegramUserId, telegramDisplayName: customer.telegramDisplayName, telegramUsername: customer.telegramUsername, primeMemberId: `PC${customer.telegramUserId.slice(0, 8).toUpperCase()}`, vipTier: "Bronze" as const, points: 0, memberSince: Date.now(), referrals: 0, totalSpending: 0, totalDiscounts: 0, appliedDiscounts: [], referees: [], referredBy: null, orderCount: 0, avatarUrl: customer.avatarUrl };
 
   return (
     <div className="bg-[#f3f4f6] min-h-full pb-10">
@@ -76,8 +76,39 @@ export default function AccountPage() {
           <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
           <div className="grid grid-cols-2 gap-4 mt-2 text-xs text-left"><div className="border p-2 rounded"><div className="text-neutral-500">TELEGRAM UID</div><div>{customerData.telegramUserId}</div></div><div className="border p-2 rounded"><div className="text-neutral-500">PRIME MEMBER ID</div><div>{customerData.primeMemberId}</div></div></div>
         </div>
-        <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm space-y-2 text-sm"><div className="flex justify-between"><span>VIP Tier Status:</span><span className="font-bold">{customerData.vipTier}</span></div><div className="flex justify-between"><span>Points:</span><span className="font-bold">{customerData.points}</span></div><div className="flex justify-between"><span>Member since:</span><span className="font-bold">{new Date(customerData.memberSince).toLocaleDateString()}</span></div><div className="flex justify-between"><span>Order Count:</span><span className="font-bold">{customerData.orderCount}</span></div><div className="flex justify-between"><span>Total Spending:</span><span className="font-bold">₱{customerData.totalSpending.toFixed(2)}</span></div></div>
-        <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm"><h2 className="font-bold mb-3">RECENT ORDERS</h2><div className="space-y-2">{orders.slice(0, 5).map((order) => <div key={order._id} className="flex justify-between text-xs border-b pb-2"><div>{order.orderNumber}</div><div>{order.orderStatus}</div><div>₱{order.total.toFixed(2)}</div></div>)}{!orders.length && <div className="text-xs text-neutral-500">No orders yet.</div>}</div></div>
+        <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm space-y-2 text-sm">
+          <div className="flex justify-between"><span>VIP Tier Status:</span><span className="font-bold">{customerData.vipTier}</span></div>
+          <div className="flex justify-between"><span>Points:</span><span className="font-bold">{customerData.points}</span></div>
+          <div className="flex justify-between"><span>Member since:</span><span className="font-bold">{new Date(customerData.memberSince || Date.now()).toLocaleDateString()}</span></div>
+          <div className="flex justify-between"><span>Order Count:</span><span className="font-bold">{customerData.orderCount || 0}</span></div>
+          <div className="flex justify-between"><span>Total Spending:</span><span className="font-bold">₱{(customerData.totalSpending || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+          <div className="flex justify-between"><span>Total Discounts Saved:</span><span className="font-bold text-emerald-600">₱{(customerData.totalDiscounts || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+          <div className="flex justify-between"><span>Referrals Made:</span><span className="font-bold">{customerData.referrals || customerData.referees?.length || 0}</span></div>
+          {customerData.referredBy && <div className="flex justify-between text-xs text-neutral-500 pt-1 border-t"><span>Referred By:</span><span className="font-mono">{customerData.referredBy}</span></div>}
+        </div>
+
+        <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm">
+          <h2 className="font-bold mb-3 text-sm flex items-center justify-between">
+            <span>APPLIED DISCOUNTS & PROMOS</span>
+            <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-normal">{(customerData.appliedDiscounts || []).length} used</span>
+          </h2>
+          <div className="space-y-2">
+            {(customerData.appliedDiscounts || []).map((disc: any, idx: number) => (
+              <div key={idx} className="flex justify-between items-center text-xs border-b border-neutral-100 pb-2">
+                <div>
+                  <div className="font-bold text-black uppercase">{disc.code}</div>
+                  <div className="text-[10px] text-neutral-400">Order #{disc.orderNumber} • {new Date(disc.date).toLocaleDateString()}</div>
+                </div>
+                <div className="font-bold text-emerald-600">-₱{(disc.amountSaved || 0).toFixed(2)}</div>
+              </div>
+            ))}
+            {!(customerData.appliedDiscounts || []).length && (
+              <div className="text-xs text-neutral-500 text-center py-3">No promo codes or discounts applied yet.</div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm"><h2 className="font-bold mb-3 text-sm">RECENT ORDERS</h2><div className="space-y-2">{orders.slice(0, 5).map((order) => <div key={order._id} className="flex justify-between text-xs border-b pb-2"><div>{order.orderNumber}</div><div>{order.orderStatus}</div><div>₱{order.total.toFixed(2)}</div></div>)}{!orders.length && <div className="text-xs text-neutral-500">No orders yet.</div>}</div></div>
       </div>
     </div>
   );
