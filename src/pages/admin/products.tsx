@@ -124,7 +124,9 @@ export default function AdminProductsPage() {
     setShowForm(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [savingProduct, setSavingProduct] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim()) {
       toast.error("Please provide a product title");
@@ -155,30 +157,42 @@ export default function AdminProductsPage() {
       available: Number(formData.stock) > 0,
       badge: formData.badge ? formData.badge : undefined,
       badgeExpiry: formData.badge ? formData.badgeExpiry || undefined : undefined,
-      image: formData.image,
+      image: formData.image || undefined,
       isCombination: formData.isCombination,
       bundleItems: formData.isCombination ? formData.bundleItems : undefined,
       bundleCalculatedPrice: formData.isCombination ? finalPrice : undefined,
     };
 
-    if (editingProduct) {
-      updateProduct(editingProduct._id, payload);
-      toast.success(`Updated "${formData.name}"`);
-    } else {
-      addProduct({
-        ...payload,
-        sortOrder: products.length + 1,
-      });
-      toast.success(`Added new product "${formData.name}"`);
+    setSavingProduct(true);
+    try {
+      if (editingProduct) {
+        await updateProduct(editingProduct._id, payload);
+        toast.success(`Updated "${formData.name}"`);
+      } else {
+        await addProduct({
+          ...payload,
+          sortOrder: products.length + 1,
+        });
+        toast.success(`Added new product "${formData.name}"`);
+      }
+      setShowForm(false);
+    } catch (err: any) {
+      console.error("Failed to save product:", err);
+      toast.error(err?.message || "Failed to save product. Please try again.");
+    } finally {
+      setSavingProduct(false);
     }
-
-    setShowForm(false);
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (window.confirm(`Are you sure you want to remove "${name}" from the catalog?`)) {
-      removeProduct(id);
-      toast.success(`Removed product "${name}"`);
+      try {
+        await removeProduct(id);
+        toast.success(`Removed product "${name}"`);
+      } catch (err: any) {
+        console.error("Failed to delete product:", err);
+        toast.error(err?.message || "Failed to delete product");
+      }
     }
   };
 
@@ -565,10 +579,11 @@ export default function AdminProductsPage() {
               </button>
               <button
                 type="submit"
-                className="bg-black text-white px-5 py-2 rounded-xl text-xs cursor-pointer hover:bg-neutral-800 shadow-xs font-normal"
+                disabled={savingProduct}
+                className="bg-black disabled:bg-neutral-400 text-white px-5 py-2 rounded-xl text-xs cursor-pointer hover:bg-neutral-800 shadow-xs font-normal transition-colors"
                 style={{ fontFamily: "'Ubuntu', sans-serif" }}
               >
-                {editingProduct ? "Save Changes" : "Create Product"}
+                {savingProduct ? "Saving..." : editingProduct ? "Save Changes" : "Create Product"}
               </button>
             </div>
           </form>

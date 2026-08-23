@@ -1,40 +1,43 @@
 import { useState, useEffect, useCallback } from "react";
-import { collection, onSnapshot, query, doc, addDoc, updateDoc, deleteDoc, setDoc, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, doc, addDoc, updateDoc, deleteDoc, setDoc, getDocs } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { INITIAL_CATEGORIES, type Product, type BundleItemConfig } from "@/data/products.ts";
+import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, type Product, type BundleItemConfig } from "@/data/products.ts";
+
+/**
+ * Removes any undefined properties from an object so Firestore does not reject the write.
+ */
+function cleanPayload<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      out[key] = val;
+    }
+  }
+  return out;
+}
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
   const [loading, setLoading] = useState(true);
 
   // Load products and categories from Firestore
   useEffect(() => {
-    // Products
-    const q = query(collection(db, "products"));
-    const unsubscribeProducts = onSnapshot(
-      q,
-      (snapshot) => {
-        const data = snapshot.docs.map((doc) => ({
-          _id: doc.id,
-          ...doc.data(),
-        })) as Product[];
-        setProducts(data);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Products listener error:", error);
-        setLoading(false);
-      }
-    );
+    let isMounted = true;
 
     // Categories
     const categoriesRef = doc(db, "config", "categories");
     const unsubscribeCategories = onSnapshot(
       categoriesRef,
       (docSnap) => {
+        if (!isMounted) return;
         if (docSnap.exists()) {
-          setCategories(docSnap.data().list || INITIAL_CATEGORIES);
+          const list = docSnap.data().list;
+          if (Array.isArray(list) && list.length > 0) {
+            setCategories(list);
+          } else {
+            setCategories(INITIAL_CATEGORIES);
+          }
         } else {
           // Initialize if missing
           setDoc(categoriesRef, { list: INITIAL_CATEGORIES }).catch((e) =>
@@ -45,22 +48,77 @@ export function useProducts() {
       },
       (error) => {
         console.error("Categories listener error:", error);
-        setCategories(INITIAL_CATEGORIES);
+        if (isMounted) setCategories(INITIAL_CATEGORIES);
+      }
+    );
+
+    // Products
+    const q = query(collection(db, "products"));
+    const unsubscribeProducts = onSnapshot(
+      q,
+      async (snapshot) => {
+        if (!isMounted) return;
+        if (snapshot.empty) {
+          // Auto-seed initial catalog products to Firestore if empty
+          try {
+            for (const item of INITIAL_PRODUCTS) {
+              const { _id, ...rest } = item;
+              const sanitized = cleanPayload(rest);
+              await setDoc(doc(db, "products", _id), sanitized);
+            }
+          } catch (e) {
+            console.warn("Could not auto-seed products to Firestore:", e);
+          }
+          if (isMounted) {
+            setProducts(INITIAL_PRODUCTS);
+            setLoading(false);
+          }
+          return;
+        }
+
+        const data = snapshot.docs.map((docSnap) => {
+          const raw = docSnap.data();
+          return {
+            _id: docSnap.id,
+            name: raw.name || "Untitled Product",
+            price: Number(raw.price) || 0,
+            stock: Number(raw.stock) || 0,
+            available: raw.available !== false,
+            ...raw,
+          } as Product;
+        });
+
+        if (isMounted) {
+          setProducts(data);
+          setLoading(false);
+        }
+      },
+      (error) => {
+        console.error("Products listener error:", error);
+        if (isMounted) {
+          setProducts((prev) => (prev.length > 0 ? prev : INITIAL_PRODUCTS));
+          setLoading(false);
+        }
       }
     );
 
     return () => {
-        unsubscribeProducts();
-        unsubscribeCategories();
+      isMounted = false;
+      unsubscribeProducts();
+      unsubscribeCategories();
     };
   }, []);
 
   const addProduct = async (newProd: Omit<Product, "_id">) => {
-    await addDoc(collection(db, "products"), newProd);
+    const cleaned = cleanPayload(newProd);
+    const docRef = await addDoc(collection(db, "products"), cleaned);
+    return docRef.id;
   };
 
   const updateProduct = async (id: string, updates: Partial<Product>) => {
-    await updateDoc(doc(db, "products", id), updates);
+    const { _id, ...rest } = updates as any;
+    const cleaned = cleanPayload(rest);
+    await updateDoc(doc(db, "products", id), cleaned);
   };
 
   const removeProduct = async (id: string) => {
@@ -72,7 +130,7 @@ export function useProducts() {
     const trimmed = newCategory.trim();
     if (!trimmed) return false;
     
-    const newCategories = [...categories, trimmed];
+    const newCategories = [...categories.filter((c) => c !== trimmed), trimmed];
     await setDoc(doc(db, "config", "categories"), { list: newCategories });
     return true;
   }, [categories]);
@@ -86,9 +144,9 @@ export function useProducts() {
 
     // Cascade update all products in this category
     for (const p of products) {
-        if (p.category === oldCategory) {
-            await updateDoc(doc(db, "products", p._id), { category: trimmedNew });
-        }
+      if (p.category === oldCategory) {
+        await updateDoc(doc(db, "products", p._id), { category: trimmedNew });
+      }
     }
     return true;
   }, [categories, products]);
@@ -99,9 +157,9 @@ export function useProducts() {
 
     // Reassign products to fallback
     for (const p of products) {
-        if (p.category === categoryToRemove) {
-            await updateDoc(doc(db, "products", p._id), { category: fallback });
-        }
+      if (p.category === categoryToRemove) {
+        await updateDoc(doc(db, "products", p._id), { category: fallback });
+      }
     }
     return true;
   }, [categories, products]);
@@ -140,3 +198,4 @@ export function useProducts() {
     computeBundlePrice,
   };
 }
+
