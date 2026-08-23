@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 function moneyToNumber(text: string) {
   const cleaned = String(text || "").replace(/[^0-9.\-]/g, "");
@@ -51,14 +51,49 @@ function hideCodeErrorCopy() {
   });
 }
 
+function setReactInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 export default function CheckoutRuntimePatch() {
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (location.pathname !== "/shop/checkout") return;
     let disposed = false;
     const timers = new Map<HTMLInputElement, number>();
     const state = new WeakMap<HTMLInputElement, string>();
+    const storageKey = "prime_checkout_codes_v1";
+
+    const readSavedCodes = () => {
+      try {
+        const value = sessionStorage.getItem(storageKey);
+        const parsed = value ? JSON.parse(value) : {};
+        return {
+          coupon: typeof parsed?.coupon === "string" ? parsed.coupon : "",
+          referral: typeof parsed?.referral === "string" ? parsed.referral : "",
+        };
+      } catch {
+        return { coupon: "", referral: "" };
+      }
+    };
+
+    const saveCode = (kind: "coupon" | "referral", value: string) => {
+      const current = readSavedCodes();
+      current[kind] = value;
+      try { sessionStorage.setItem(storageKey, JSON.stringify(current)); } catch {}
+    };
+
+    const restoreCodes = () => {
+      const saved = readSavedCodes();
+      const coupon = document.querySelector<HTMLInputElement>('input[placeholder="COUPON"]');
+      const referral = document.querySelector<HTMLInputElement>('input[placeholder="REFERRAL"]');
+      if (coupon && !coupon.value && saved.coupon) setReactInputValue(coupon, saved.coupon);
+      if (referral && !referral.value && saved.referral) setReactInputValue(referral, saved.referral);
+    };
 
     const hydratePrimeMid = async () => {
       const uidInput = Array.from(document.querySelectorAll<HTMLInputElement>("input")).find((input) => input.value && /^\d+$/.test(input.value) && input.previousElementSibling?.textContent?.includes("TELEGRAM UID"));
@@ -71,7 +106,7 @@ export default function CheckoutRuntimePatch() {
         if (!mid || disposed) return;
         const label = Array.from(document.querySelectorAll("span")).find((node) => node.textContent?.trim() === "PRIME MID");
         const input = label?.parentElement?.querySelector("input") as HTMLInputElement | null;
-        if (input) input.value = mid;
+        if (input && input.value !== mid) setReactInputValue(input, mid);
       } catch {}
     };
 
@@ -83,6 +118,7 @@ export default function CheckoutRuntimePatch() {
         return;
       }
       const kind = input.placeholder?.toUpperCase() === "REFERRAL" ? "referral" : "coupon";
+      saveCode(kind, code);
       input.style.borderColor = "#a3a3a3";
       try {
         const response = await fetch("/api/checkout/validate-code", {
@@ -111,24 +147,62 @@ export default function CheckoutRuntimePatch() {
       const input = event.target as HTMLInputElement;
       if (!(input instanceof HTMLInputElement)) return;
       if (input.placeholder !== "COUPON" && input.placeholder !== "REFERRAL") return;
+      const kind = input.placeholder === "REFERRAL" ? "referral" : "coupon";
+      saveCode(kind, input.value.toUpperCase());
       const oldTimer = timers.get(input);
       if (oldTimer) window.clearTimeout(oldTimer);
       const timer = window.setTimeout(() => void validateField(input), 350);
       timers.set(input, timer);
     };
 
-    const observer = new MutationObserver(() => {
-      applyDeliveryLabels();
-      hideCodeErrorCopy();
-      void hydratePrimeMid();
+    const onCodeClick = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      const input = target?.closest('input[placeholder="COUPON"], input[placeholder="REFERRAL"]') as HTMLInputElement | null;
+      if (!input) return;
+      event.stopPropagation();
+    };
+
+    const onCodeKeyDown = (event: KeyboardEvent) => {
+      const input = event.target as HTMLElement | null;
+      if (!(input instanceof HTMLInputElement)) return;
+      if (input.placeholder !== "COUPON" && input.placeholder !== "REFERRAL") return;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    const onSuccessOrderClick = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest("button") as HTMLButtonElement | null;
+      if (!button || !/View Order Tracking & Details/i.test(button.textContent || "")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      try { sessionStorage.removeItem(storageKey); } catch {}
+      navigate("/shop/orders");
+    };
+
+    const bindCodeInputs = () => {
       document.querySelectorAll<HTMLInputElement>('input[placeholder="COUPON"], input[placeholder="REFERRAL"]').forEach((input) => {
         if (!state.has(input)) input.addEventListener("input", onInput);
       });
+      restoreCodes();
+    };
+
+    const observer = new MutationObserver(() => {
+      applyDeliveryLabels();
+      hideCodeErrorCopy();
+      restoreCodes();
+      void hydratePrimeMid();
+      bindCodeInputs();
     });
 
-    document.querySelectorAll<HTMLInputElement>('input[placeholder="COUPON"], input[placeholder="REFERRAL"]').forEach((input) => input.addEventListener("input", onInput));
+    document.addEventListener("click", onCodeClick, true);
+    document.addEventListener("keydown", onCodeKeyDown, true);
+    document.addEventListener("click", onSuccessOrderClick, true);
+    bindCodeInputs();
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    const labelTimer = window.setInterval(() => { applyDeliveryLabels(); hideCodeErrorCopy(); void hydratePrimeMid(); }, 500);
+    const labelTimer = window.setInterval(() => { applyDeliveryLabels(); hideCodeErrorCopy(); restoreCodes(); void hydratePrimeMid(); }, 500);
     void hydratePrimeMid();
 
     return () => {
@@ -136,9 +210,12 @@ export default function CheckoutRuntimePatch() {
       observer.disconnect();
       window.clearInterval(labelTimer);
       timers.forEach((timer) => window.clearTimeout(timer));
+      document.removeEventListener("click", onCodeClick, true);
+      document.removeEventListener("keydown", onCodeKeyDown, true);
+      document.removeEventListener("click", onSuccessOrderClick, true);
       document.querySelectorAll<HTMLInputElement>('input[placeholder="COUPON"], input[placeholder="REFERRAL"]').forEach((input) => input.removeEventListener("input", onInput));
     };
-  }, [location.pathname]);
+  }, [location.pathname, navigate]);
 
   return null;
 }
