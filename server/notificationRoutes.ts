@@ -2,6 +2,7 @@ import type { Application, Request, Response } from "express";
 import { firestoreService } from "./firestoreService.js";
 import { migratePrimeMemberIds } from "./primeIdentity.js";
 import { installCommerceRepairRoutes } from "./commerceRepairRoutes.js";
+import "./orderIdentityPatch.js";
 
 export async function createNotification(data: {
   telegramUserId: string;
