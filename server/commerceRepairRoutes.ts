@@ -85,6 +85,26 @@ function cleanCourierConfig(body: any) {
 }
 
 export function installCommerceRepairRoutes(app: Application) {
+  // Enrich the existing authoritative quote response with its already-calculated discount.
+  // The legacy checkout route owns the calculation; this middleware only exposes the value to the UI.
+  app.post("/api/checkout/quote", (req, res, next) => {
+    const originalJson = res.json.bind(res);
+    res.json = ((payload: any) => {
+      if (payload?.quote) {
+        const q = payload.quote;
+        const subtotal = Number(q.subtotal || 0);
+        const charges = Number(q.charges || 0);
+        const tax = Number(q.tax || 0);
+        const deliveryDueNow = Number(q.deliveryDueNow || 0);
+        const total = Number(q.total || 0);
+        const derivedDiscount = Math.max(0, Math.round((subtotal + charges + tax + deliveryDueNow - total) * 100) / 100);
+        payload.quote = { ...q, discount: Number.isFinite(Number(q.discount)) ? Number(q.discount) : derivedDiscount };
+      }
+      return originalJson(payload);
+    }) as any;
+    next();
+  });
+
   app.post("/api/checkout/validate-code", async (req, res) => {
     try {
       const telegramId = telegramUserId(req);
