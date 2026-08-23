@@ -1,4 +1,5 @@
 import express from "express";
+import { installIdentityOrderRepairRoutes } from "./identityOrderRepairRoutes.js";
 import { installReleaseRoutes } from "./releaseRoutes.js";
 import { installProductComparisonRoutes } from "./productComparisonRoutes.js";
 import { installTelegramAvatarRoutes } from "./telegramAvatarRoutes.js";
@@ -10,6 +11,7 @@ const originalListen = proto.listen;
 if (!(proto as any).__primeReleaseRoutesInstalled) {
   proto.__primeReleaseRoutesInstalled = true;
   proto.listen = function patchedListen(this: any, ...args: any[]) {
+    installIdentityOrderRepairRoutes(this);
     installReleaseRoutes(this);
     installProductComparisonRoutes(this);
     installTelegramAvatarRoutes(this);
