@@ -44,8 +44,8 @@ function AppShell() {
   const isAdmin = location.pathname.startsWith("/admin");
   return (
     <div className="w-full min-h-[100dvh] flex flex-col items-center justify-start bg-neutral-950 overflow-x-hidden">
-      <div className={`w-full max-w-[412px] min-h-[100dvh] relative flex flex-col justify-between overflow-x-hidden shadow-2xl border-x border-neutral-800/20 ${isAdmin ? "bg-white" : "bg-[#f3f4f6] pb-16"}`}>
-        <div className="flex-1 w-full flex flex-col">
+      <div className={`w-full max-w-[412px] min-h-[100dvh] relative flex flex-col justify-start overflow-x-hidden shadow-2xl border-x border-neutral-800/20 ${isAdmin ? "bg-white" : "bg-[#f3f4f6]"}`}>
+        <div className="flex-1 w-full flex flex-col min-h-0">
           <Routes>
             <Route path="/" element={<Navigate to="/shop" replace />} />
             <Route path="/shop" element={<ShopLayout />}>
@@ -70,7 +70,7 @@ function AppShell() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </div>
-        <GlobalProprietaryFooter />
+        {isAdmin && <GlobalProprietaryFooter />}
       </div>
     </div>
   );
