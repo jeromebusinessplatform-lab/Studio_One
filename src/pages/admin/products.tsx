@@ -85,6 +85,7 @@ export default function AdminProductsPage() {
     // Bundle / Combination state
     isCombination: false,
     bundleItems: [] as BundleItemConfig[],
+    allowComparison: true,
   });
 
   // Calculate Product count per Category
@@ -120,6 +121,7 @@ export default function AdminProductsPage() {
       image: undefined,
       isCombination: false,
       bundleItems: [],
+      allowComparison: true,
     });
     setShowForm(true);
   };
@@ -140,6 +142,7 @@ export default function AdminProductsPage() {
       image: p.image,
       isCombination: !!p.isCombination,
       bundleItems: p.bundleItems ?? [],
+      allowComparison: p.allowComparison !== false,
     });
     setShowForm(true);
   };
@@ -181,6 +184,7 @@ export default function AdminProductsPage() {
       isCombination: formData.isCombination,
       bundleItems: formData.isCombination ? formData.bundleItems : undefined,
       bundleCalculatedPrice: formData.isCombination ? finalPrice : undefined,
+      allowComparison: formData.allowComparison,
     };
 
     setSavingProduct(true);
@@ -903,6 +907,20 @@ export default function AdminProductsPage() {
                     }
                   />
                 )}
+              </div>
+
+              {/* Allow Comparison Toggle */}
+              <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-xl border border-neutral-200">
+                <div>
+                  <span className="font-semibold text-neutral-900 text-xs">Allow Product Comparison</span>
+                  <p className="text-[10px] text-neutral-500">Enable customers to compare this product in catalog view</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formData.allowComparison}
+                  onChange={(e) => setFormData({ ...formData, allowComparison: e.target.checked })}
+                  className="w-4 h-4 rounded text-black focus:ring-0 cursor-pointer"
+                />
               </div>
 
               {/* Form Action Buttons */}

@@ -659,6 +659,7 @@ export default function ShopCatalog() {
             initial="hidden"
             animate="visible"
             variants={{
+              hidden: {},
               visible: { transition: { staggerChildren: 0.05 } }
             }}
           >
@@ -666,8 +667,13 @@ export default function ShopCatalog() {
               <motion.div
                 key={product._id}
                 variants={{
-                  hidden: { opacity: 0, y: 10 },
-                  visible: { opacity: 1, y: 0 }
+                  hidden: { opacity: 0, scale: 0.94, y: 12 },
+                  visible: { 
+                    opacity: 1, 
+                    scale: 1, 
+                    y: 0, 
+                    transition: { type: "spring", stiffness: 320, damping: 24 } 
+                  }
                 }}
               >
                 <ProductCard product={product} allProducts={products} />

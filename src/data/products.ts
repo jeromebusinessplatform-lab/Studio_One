@@ -25,6 +25,7 @@ export interface Product {
   specifications?: ProductSpecifications;
   ratingAverage?: number;
   ratingCount?: number;
+  allowComparison?: boolean;
 
   // Combination / Bundle configuration
   isCombination?: boolean;

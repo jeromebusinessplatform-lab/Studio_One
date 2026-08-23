@@ -32,11 +32,12 @@ function normalizeProduct(product: any) {
     salePrice,
     stock: Math.max(0, Number(product.stock) || 0),
     available: product.available !== false,
-    category: product.category || undefined,
+    category: product.category || "General",
     specifications: normalizeSpecs(product),
     ratingAverage: Math.min(5, Math.max(0, Number(product.ratingAverage ?? product.rating ?? 4.8) || 0)),
     ratingCount: Math.max(0, Math.floor(Number(product.ratingCount ?? 12) || 0)),
     badge: product.badge || undefined,
+    allowComparison: product.allowComparison !== false,
   };
 }
 
@@ -49,6 +50,18 @@ export function installProductComparisonRoutes(app: Application) {
       const products = await Promise.all(ids.map((id) => firestoreService.getDocument("products", id)));
       const found = products.filter(Boolean).map(normalizeProduct);
       if (found.length !== ids.length) return res.status(404).json({ error: "One or more selected products are no longer available" });
+      
+      // Check allowComparison
+      if (found.some((p) => !p.allowComparison)) {
+        return res.status(400).json({ error: "One or more selected products have comparison disabled by administrator." });
+      }
+
+      // Check category match
+      const firstCategory = found[0].category;
+      if (!found.every((p) => p.category === firstCategory)) {
+        return res.status(400).json({ error: "You can only compare products from the same category." });
+      }
+
       return res.json({ products: found, maxCompare: MAX_COMPARE, fetchedAt: Date.now() });
     } catch (error) {
       console.error("Product comparison error:", error);
