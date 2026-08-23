@@ -28,6 +28,21 @@ export async function ensureUniquePrimeMemberId(candidate: unknown, customerId: 
   return generatePrimeMemberId(used);
 }
 
+// The existing Telegram auth route historically supplied PC + Telegram-ID-derived MIDs.
+// Wrap customer writes so a brand-new customer receives a random 10-character MID instead.
+const originalSetDocument = firestoreService.setDocument.bind(firestoreService);
+firestoreService.setDocument = async (collection, id, data, merge = true) => {
+  if (collection === "customers" && data?.__skipPrimeMidUniqueness !== true) {
+    const existing = await firestoreService.getDocument("customers", id);
+    const legacyMid = `PC${String(id).slice(0, 8).toUpperCase()}`;
+    if (!existing && String(data?.primeMemberId || "").toUpperCase() === legacyMid) {
+      const used = new Set((await firestoreService.getDocuments("customers")).map((customer: any) => String(customer.primeMemberId || "").toUpperCase()).filter(Boolean));
+      data = { ...data, primeMemberId: generatePrimeMemberId(used) };
+    }
+  }
+  return originalSetDocument(collection, id, data, merge);
+};
+
 export async function migratePrimeMemberIds(): Promise<void> {
   if (migrationPromise) return migrationPromise;
   migrationPromise = (async () => {
