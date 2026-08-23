@@ -8,6 +8,11 @@ const TG_TTL_MS = 24 * 60 * 60 * 1000;
 const DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || "ai-studio-primecommerce-f59766ab-326b-40a2-bcc8-eae7f46dfe5f";
 const TAX_RATE = 0.05;
 const FREE_DELIVERY_THRESHOLD = 2500;
+const FALLBACK_COURIERS: Record<string, any> = {
+  "courier-1": { name: "PRIME In-House Express", baseFare: 60, baseDistanceKm: 4, perKmCharge: 12, platformFeeEnabled: false, platformFee: 0, nightDifferentialEnabled: true, nightDifferentialFee: 30, surchargeEnabled: false, surchargeFee: 0, isAvailable: true },
+  "courier-2": { name: "Lalamove 2-Wheel", baseFare: 70, baseDistanceKm: 3, perKmCharge: 15, platformFeeEnabled: true, platformFee: 10, nightDifferentialEnabled: true, nightDifferentialFee: 40, surchargeEnabled: true, surchargeFee: 20, isAvailable: true },
+  "courier-3": { name: "GrabExpress Flash", baseFare: 80, baseDistanceKm: 5, perKmCharge: 18, platformFeeEnabled: true, platformFee: 15, nightDifferentialEnabled: false, nightDifferentialFee: 0, surchargeEnabled: false, surchargeFee: 0, isAvailable: true },
+};
 
 type PaymentMethod = "TELEGRAM_PAY" | "DIRECT_TRANSFER";
 type DeliveryPaymentOption = "PAY_AT_CHECKOUT" | "PAY_UPON_FULFILLMENT";
@@ -102,8 +107,8 @@ async function buildQuote(input: any) {
   if (!courierId) throw new Error("Select a delivery provider");
   if (!Number.isFinite(distanceKm) || distanceKm < 0 || distanceKm > 500) throw new Error("Invalid delivery distance");
   const courierSnap = await firestore.collection("couriers").doc(courierId).get();
-  if (!courierSnap.exists) throw new Error("Selected delivery provider is unavailable");
-  const courier: any = courierSnap.data() || {};
+  const courier: any = courierSnap.exists ? courierSnap.data() || {} : FALLBACK_COURIERS[courierId];
+  if (!courier) throw new Error("Selected delivery provider is unavailable");
   if (courier.isAvailable !== true) throw new Error("Selected delivery provider is currently unavailable");
 
   const deliveryCharge = subtotal > FREE_DELIVERY_THRESHOLD ? 0 : calculateCourierCharge(courier, distanceKm);
@@ -111,17 +116,16 @@ async function buildQuote(input: any) {
   const deliveryDueNow = deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? 0 : deliveryCharge;
 
   const chargesSnap = await firestore.collection("charges").get();
-  const chargesBase = subtotal;
   const charges = roundMoney(chargesSnap.docs.reduce((sum, doc) => {
     const charge: any = doc.data();
     if (charge.active !== true) return sum;
     const amount = number(charge.amount);
-    return sum + (charge.type === "percent" ? chargesBase * amount / 100 : amount);
+    return sum + (charge.type === "percent" ? subtotal * amount / 100 : amount);
   }, 0));
   const tax = roundMoney((subtotal + charges) * TAX_RATE);
   const total = roundMoney(subtotal + charges + tax + deliveryDueNow);
   const fulfillmentTotal = roundMoney(subtotal + charges + tax + deliveryCharge);
-  return { items, normalizedItems, subtotal, charges, tax, deliveryCharge, deliveryDueNow, fulfillmentTotal, total, courier: { id: courierSnap.id, name: String(courier.name || "Delivery Provider") }, distanceKm, deliveryPaymentOption };
+  return { items, normalizedItems, subtotal, charges, tax, deliveryCharge, deliveryDueNow, fulfillmentTotal, total, courier: { id: courierSnap.exists ? courierSnap.id : courierId, name: String(courier.name || "Delivery Provider") }, distanceKm, deliveryPaymentOption };
 }
 
 function setTelegramSession(res: Response, userId: string) {
@@ -144,7 +148,7 @@ export function installCheckoutRoutes(app: Application) {
     }
   });
 
-  app.post("/api/orders", async (req, res, next) => {
+  app.post("/api/orders", async (req, res) => {
     const tg = telegramUserId(req);
     if (!tg) return res.status(401).json({ error: "Verified Telegram identity required" });
     try {
@@ -158,7 +162,7 @@ export function installCheckoutRoutes(app: Application) {
       if (deliveryAddress.length < 5 || deliveryAddress.length > 500) throw new Error("Invalid delivery address");
       if (!["Telegram Pay", "Direct Transfer / GCash / Maya"].includes(paymentMethodName)) throw new Error("Invalid payment method");
       const deliveryPaymentOption: DeliveryPaymentOption = input.deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? "PAY_UPON_FULFILLMENT" : "PAY_AT_CHECKOUT";
-      const paymentMethod: PaymentMethod = input.paymentMethodName === "Telegram Pay" ? "TELEGRAM_PAY" : "DIRECT_TRANSFER";
+      const paymentMethod: PaymentMethod = paymentMethodName === "Telegram Pay" ? "TELEGRAM_PAY" : "DIRECT_TRANSFER";
       const quote = await buildQuote({ ...input, deliveryPaymentOption });
       if (paymentMethod === "DIRECT_TRANSFER" && !input.receiptUrl) throw new Error("Payment proof is required for direct transfer");
 
@@ -227,7 +231,4 @@ export function installCheckoutRoutes(app: Application) {
       return res.status(400).json({ error: error?.message || "Unable to create order" });
     }
   });
-
-  // Prevent accidental fall-through from this module when future handlers are added.
-  void next;
 }
