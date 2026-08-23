@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
 
 export interface CartItem {
   productId: string;
@@ -110,11 +110,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const clearCart = useCallback(() => setItems([]), []);
 
-  const selectedItems = items.filter((i) => i.selected);
-  const totalItems = items.reduce((s, i) => s + i.quantity, 0);
-  const selectedCount = selectedItems.reduce((s, i) => s + i.quantity, 0);
-  const subtotal = items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-  const selectedSubtotal = selectedItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+  const selectedItems = useMemo(() => items.filter((i) => i.selected), [items]);
+  const totalItems = useMemo(() => items.reduce((s, i) => s + i.quantity, 0), [items]);
+  const selectedCount = useMemo(() => selectedItems.reduce((s, i) => s + i.quantity, 0), [selectedItems]);
+  const subtotal = useMemo(() => items.reduce((s, i) => s + i.unitPrice * i.quantity, 0), [items]);
+  const selectedSubtotal = useMemo(() => selectedItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0), [selectedItems]);
 
   return (
     <CartContext.Provider

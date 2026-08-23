@@ -136,22 +136,22 @@ export default function AdminCashflowPage() {
   };
 
   return (
-    <div className="p-3 sm:p-5 space-y-5 bg-white text-black min-h-screen">
+    <div className="p-3 sm:p-4 w-full max-w-full space-y-3 bg-white text-black min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-neutral-200 pb-2.5">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => navigate("/admin")}
-            className="p-1 text-neutral-500 hover:text-black rounded"
+            className="p-1 text-neutral-500 hover:text-black rounded cursor-pointer"
           >
             <ArrowLeft size={18} />
           </button>
           <div>
-            <h1 className="text-xl font-bold uppercase tracking-tight font-condensed">
+            <h1 className="text-lg sm:text-xl font-bold uppercase tracking-tight font-condensed">
               CASHFLOW & FINANCIAL LEDGER
             </h1>
-            <p className="text-xs text-neutral-500">
+            <p className="text-[11px] text-neutral-500 font-normal">
               Live settlement reconciliation, payment channels & expense logging
             </p>
           </div>
@@ -159,53 +159,53 @@ export default function AdminCashflowPage() {
         <button
           type="button"
           onClick={handleExportCsv}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-black text-white text-xs font-condensed uppercase rounded-lg hover:bg-neutral-800 transition"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-black text-white text-xs font-condensed uppercase rounded-lg hover:bg-neutral-800 transition cursor-pointer self-start sm:self-auto"
         >
-          <Download size={13} /> Export CSV
+          <Download size={12} /> Export CSV
         </button>
       </div>
 
       {/* Main KPI Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200">
-          <div className="flex items-center justify-between text-neutral-500 text-xs font-condensed uppercase">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="p-2.5 bg-neutral-50 rounded-xl border border-neutral-200">
+          <div className="flex items-center justify-between text-neutral-500 text-[11px] font-condensed uppercase">
             <span>Gross Inflow</span>
-            <ArrowDownLeft size={15} className="text-emerald-600" />
+            <ArrowDownLeft size={13} className="text-emerald-600" />
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono mt-1 text-black">
+          <div className="text-base sm:text-lg font-bold font-mono mt-0.5 text-black">
             {formatCurrency(grossVolume)}
           </div>
           <div className="text-[10px] text-neutral-400 mt-0.5">{allOrders.length} total orders</div>
         </div>
 
-        <div className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200">
-          <div className="flex items-center justify-between text-neutral-500 text-xs font-condensed uppercase">
+        <div className="p-2.5 bg-neutral-50 rounded-xl border border-neutral-200">
+          <div className="flex items-center justify-between text-neutral-500 text-[11px] font-condensed uppercase">
             <span>Collected Cash</span>
-            <CheckCircle2 size={15} className="text-blue-600" />
+            <CheckCircle2 size={13} className="text-blue-600" />
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono mt-1 text-emerald-700">
+          <div className="text-base sm:text-lg font-bold font-mono mt-0.5 text-emerald-700">
             {formatCurrency(collectedCash)}
           </div>
           <div className="text-[10px] text-neutral-400 mt-0.5">{confirmedOrders.length} verified paid</div>
         </div>
 
-        <div className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200">
-          <div className="flex items-center justify-between text-neutral-500 text-xs font-condensed uppercase">
+        <div className="p-2.5 bg-neutral-50 rounded-xl border border-neutral-200">
+          <div className="flex items-center justify-between text-neutral-500 text-[11px] font-condensed uppercase">
             <span>Total Expenses</span>
-            <ArrowUpRight size={15} className="text-rose-600" />
+            <ArrowUpRight size={13} className="text-rose-600" />
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono mt-1 text-rose-700">
+          <div className="text-base sm:text-lg font-bold font-mono mt-0.5 text-rose-700">
             {formatCurrency(totalExpenses)}
           </div>
           <div className="text-[10px] text-neutral-400 mt-0.5">{expenses.length} disbursements</div>
         </div>
 
-        <div className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200">
-          <div className="flex items-center justify-between text-neutral-500 text-xs font-condensed uppercase">
+        <div className="p-2.5 bg-neutral-50 rounded-xl border border-neutral-200">
+          <div className="flex items-center justify-between text-neutral-500 text-[11px] font-condensed uppercase">
             <span>Net Operating Margin</span>
-            <Wallet size={15} className="text-amber-600" />
+            <Wallet size={13} className="text-amber-600" />
           </div>
-          <div className="text-lg sm:text-xl font-bold font-mono mt-1 text-black">
+          <div className="text-base sm:text-lg font-bold font-mono mt-0.5 text-black">
             {formatCurrency(netOperatingCash)}
           </div>
           <div className="text-[10px] text-neutral-400 mt-0.5">Cleared cash on hand</div>
@@ -213,11 +213,11 @@ export default function AdminCashflowPage() {
       </div>
 
       {/* Payment Gateway Breakdown */}
-      <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs space-y-3">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-600 font-condensed">
+      <div className="bg-white border border-neutral-200 rounded-xl p-3 shadow-xs space-y-2.5">
+        <h2 className="text-[11px] font-bold uppercase tracking-wider text-neutral-600 font-condensed">
           PAYMENT CHANNEL RECONCILIATION
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <div className="p-3 bg-neutral-50 rounded-lg border border-neutral-200">
             <div className="flex items-center justify-between text-xs font-semibold text-blue-700">
               <span>GCash</span>

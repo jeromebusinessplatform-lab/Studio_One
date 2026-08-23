@@ -150,22 +150,22 @@ export default function AdminSupportPage() {
   };
 
   return (
-    <div className="p-3 sm:p-5 space-y-4 bg-white text-black min-h-screen">
+    <div className="p-3 sm:p-4 w-full max-w-full space-y-3 bg-white text-black min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-neutral-200 pb-2.5">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => navigate("/admin")}
-            className="p-1 text-neutral-500 hover:text-black rounded"
+            className="p-1 text-neutral-500 hover:text-black rounded cursor-pointer"
           >
             <ArrowLeft size={18} />
           </button>
           <div>
-            <h1 className="text-xl font-bold uppercase tracking-tight font-condensed">
+            <h1 className="text-lg sm:text-xl font-bold uppercase tracking-tight font-condensed">
               SUPPORT & TICKET RESOLVER
             </h1>
-            <p className="text-xs text-neutral-500">
+            <p className="text-[11px] text-neutral-500 font-normal">
               Customer inquiry queue, Telegram live response & broadcast alerts
             </p>
           </div>
@@ -173,9 +173,9 @@ export default function AdminSupportPage() {
         <button
           type="button"
           onClick={() => setShowBroadcastModal(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-black text-white text-xs font-condensed uppercase rounded-lg hover:bg-neutral-800 transition"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-black text-white text-xs font-condensed uppercase rounded-lg hover:bg-neutral-800 transition cursor-pointer self-start sm:self-auto"
         >
-          <Megaphone size={13} /> Telegram Broadcast
+          <Megaphone size={12} /> Telegram Broadcast
         </button>
       </div>
 

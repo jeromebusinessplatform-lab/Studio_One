@@ -82,21 +82,21 @@ export default function AdminReceiptOcrPage() {
   };
 
   return (
-    <div className="p-3 sm:p-5 space-y-4 max-w-6xl mx-auto bg-white text-black min-h-screen">
+    <div className="p-3 sm:p-4 w-full max-w-full space-y-3 bg-white text-black min-h-screen">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-neutral-200 pb-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 border-b border-neutral-200 pb-2.5">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => navigate("/admin")}
-            className="p-1 text-neutral-500 hover:text-black rounded"
+            className="p-1 text-neutral-500 hover:text-black rounded cursor-pointer"
           >
             <ArrowLeft size={18} />
           </button>
           <div>
             <div className="flex items-center gap-2">
               <h1
-                className="text-black text-xl font-bold tracking-tight uppercase"
+                className="text-black text-lg sm:text-xl font-bold tracking-tight uppercase"
                 style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
               >
                 RECEIPT OCR INTELLIGENCE
@@ -106,7 +106,7 @@ export default function AdminReceiptOcrPage() {
               </span>
             </div>
             <p
-              className="text-neutral-500 text-xs font-normal"
+              className="text-neutral-500 text-[11px] font-normal"
               style={{ fontFamily: "'Ubuntu', sans-serif" }}
             >
               Extraction of GCash, Maya, and bank payment slips
@@ -115,7 +115,7 @@ export default function AdminReceiptOcrPage() {
         </div>
 
         {/* System Status Pill */}
-        <div className="flex items-center gap-2 text-xs font-mono bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-1.5 shadow-2xs">
+        <div className="flex items-center gap-2 text-xs font-mono bg-neutral-50 border border-neutral-200 rounded-xl px-2.5 py-1 shadow-2xs self-start md:self-auto">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-neutral-600 font-normal">Engine:</span>
           <span className="font-bold text-black">{ocrStatus?.model || "gemini-3.7-flash"}</span>

@@ -2,6 +2,7 @@ import { useCart } from "@/context/CartContext.tsx";
 import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, CheckSquare, Square, Info } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { formatCurrency } from "@/lib/utils.ts";
+import { motion, AnimatePresence } from "motion/react";
 
 export default function CartPage() {
   const {
@@ -59,29 +60,45 @@ export default function CartPage() {
           </div>
 
           <div className="bg-white rounded-2xl border border-neutral-200/90 p-3 shadow-xs space-y-3">
-            {items.map((item) => (
-              <div key={item.productId} className={`flex items-center gap-3 border-b border-neutral-100 pb-3 last:border-0 last:pb-0 transition-opacity ${item.selected ? "opacity-100" : "opacity-60 bg-neutral-50/50 -mx-1 px-1 rounded-lg"}`}>
-                <input type="checkbox" id={`cart-item-${item.productId}`} checked={item.selected} onChange={() => toggleSelect(item.productId)} className="w-4 h-4 rounded border-neutral-300 text-black focus:ring-black cursor-pointer accent-black shrink-0" aria-label={`Select ${item.productName} for checkout`} />
-                <div className="w-14 h-14 rounded-lg bg-neutral-50 border border-neutral-100 p-1 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                  {item.image ? <img src={item.image} alt={item.productName} className="w-full h-full object-contain" referrerPolicy="no-referrer" /> : <ShoppingBag size={20} className="text-neutral-300" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-1">
-                    <h3 className="font-normal text-neutral-900 text-sm truncate" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>{item.productName}</h3>
-                    <button type="button" onClick={() => removeItem(item.productId)} className="text-neutral-300 hover:text-red-500 p-0.5 cursor-pointer transition-colors" title="Remove item" aria-label={`Remove ${item.productName}`}><Trash2 size={13} /></button>
+            <AnimatePresence>
+              {items.map((item) => (
+                <motion.div
+                  key={item.productId}
+                  layout
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -50 }}
+                  drag="x"
+                  dragConstraints={{ left: -100, right: 0 }}
+                  onDragEnd={(_, info) => {
+                    if (info.offset.x < -50) {
+                      removeItem(item.productId);
+                    }
+                  }}
+                  className={`flex items-center gap-3 border-b border-neutral-100 pb-3 last:border-0 last:pb-0 transition-opacity ${item.selected ? "opacity-100" : "opacity-60 bg-neutral-50/50 -mx-1 px-1 rounded-lg"}`}
+                >
+                  <input type="checkbox" id={`cart-item-${item.productId}`} checked={item.selected} onChange={() => toggleSelect(item.productId)} className="w-4 h-4 rounded border-neutral-300 text-black focus:ring-black cursor-pointer accent-black shrink-0" aria-label={`Select ${item.productName} for checkout`} />
+                  <div className="w-14 h-14 rounded-lg bg-neutral-50 border border-neutral-100 p-1 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                    {item.image ? <img src={item.image} alt={item.productName} className="w-full h-full object-contain" referrerPolicy="no-referrer" /> : <ShoppingBag size={20} className="text-neutral-300" />}
                   </div>
-                  <div className="text-xs text-black font-normal mt-0.5" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{formatCurrency(item.unitPrice)} each</div>
-                  <div className="mt-2 flex items-center justify-between">
-                    <div className="h-6 border border-neutral-200 rounded-md flex items-center bg-neutral-50 overflow-hidden">
-                      <button type="button" onClick={() => updateQuantity(item.productId, item.quantity - 1)} className="px-2 h-full text-neutral-600 hover:bg-neutral-200 active:bg-neutral-300 cursor-pointer" aria-label="Decrease quantity"><Minus size={10} className="stroke-[2.5]" /></button>
-                      <span className="px-2 text-xs font-normal text-black font-mono" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{item.quantity}</span>
-                      <button type="button" onClick={() => updateQuantity(item.productId, item.quantity + 1)} className="px-2 h-full text-neutral-600 hover:bg-neutral-200 active:bg-neutral-300 cursor-pointer" aria-label="Increase quantity"><Plus size={10} className="stroke-[2.5]" /></button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-1">
+                      <h3 className="font-normal text-neutral-900 text-sm truncate" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>{item.productName}</h3>
+                      <button type="button" onClick={() => removeItem(item.productId)} className="text-neutral-300 hover:text-red-500 p-0.5 cursor-pointer transition-colors" title="Remove item" aria-label={`Remove ${item.productName}`}><Trash2 size={13} /></button>
                     </div>
-                    <div className="text-xs font-semibold text-neutral-900 font-mono" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{formatCurrency(item.unitPrice * item.quantity)}</div>
+                    <div className="text-xs text-black font-normal mt-0.5" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{formatCurrency(item.unitPrice)} each</div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="h-6 border border-neutral-200 rounded-md flex items-center bg-neutral-50 overflow-hidden">
+                        <button type="button" onClick={() => updateQuantity(item.productId, item.quantity - 1)} className="px-2 h-full text-neutral-600 hover:bg-neutral-200 active:bg-neutral-300 cursor-pointer" aria-label="Decrease quantity"><Minus size={10} className="stroke-[2.5]" /></button>
+                        <span className="px-2 text-xs font-normal text-black font-mono" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{item.quantity}</span>
+                        <button type="button" onClick={() => updateQuantity(item.productId, item.quantity + 1)} className="px-2 h-full text-neutral-600 hover:bg-neutral-200 active:bg-neutral-300 cursor-pointer" aria-label="Increase quantity"><Plus size={10} className="stroke-[2.5]" /></button>
+                      </div>
+                      <div className="text-xs font-semibold text-neutral-900 font-mono" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{formatCurrency(item.unitPrice * item.quantity)}</div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
 
           <div className="bg-white rounded-2xl border border-neutral-200/90 p-4 shadow-xs space-y-2">

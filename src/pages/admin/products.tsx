@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "motion/react";
 import { useProducts } from "@/hooks/useProducts.ts";
 import { ProductListSkeleton } from "@/components/admin/ProductListSkeleton.tsx";
+import { AdminOverlayLoader } from "@/components/admin/AdminOverlayLoader.tsx";
 import {
   Package,
   Plus,
@@ -10,16 +12,16 @@ import {
   X,
   Check,
   ShoppingBag,
-  Layers,
   Sparkles,
   Tag,
-  Clock,
-  AlertTriangle,
   FolderCog,
-  Percent,
-  DollarSign,
-  TrendingUp,
   ArrowLeft,
+  CheckSquare,
+  Square,
+  CheckCircle2,
+  XCircle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { type Product, type BundleItemConfig, isBadgeActive } from "@/data/products.ts";
 import { toast } from "sonner";
@@ -28,9 +30,10 @@ import { CategoryManagerModal } from "@/components/admin/CategoryManagerModal.ts
 import { ProductImageUploader } from "@/components/admin/ProductImageUploader.tsx";
 import { ProductBundleManager } from "@/components/admin/ProductBundleManager.tsx";
 import { ProductBadgeSelector } from "@/components/admin/ProductBadgeSelector.tsx";
+import { BundleViewModal } from "@/components/admin/BundleViewModal.tsx";
+import { AdminActionDrawer } from "@/components/AdminActionDrawer.tsx";
 
 export default function AdminProductsPage() {
-  const navigate = useNavigate();
   const {
     products,
     categories,
@@ -38,16 +41,33 @@ export default function AdminProductsPage() {
     addProduct,
     updateProduct,
     removeProduct,
+    batchDeleteProducts,
+    batchUpdateCategory,
+    batchSetAvailability,
+    batchSetBadge,
     addCategory,
     editCategory,
     removeCategory,
     computeBundlePrice,
   } = useProducts();
+  const navigate = useNavigate();
 
   const [showForm, setShowForm] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [viewingBundleProduct, setViewingBundleProduct] = useState<Product | null>(null);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>("ALL");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [overlayLoading, setOverlayLoading] = useState<{ isVisible: boolean; label: string; sublabel?: string }>({
+    isVisible: false,
+    label: "",
+  });
+
+  // Batch action modals / dropdown state
+  const [batchTargetCategory, setBatchTargetCategory] = useState<string>("");
+  const [showBatchCategoryDialog, setShowBatchCategoryDialog] = useState(false);
+  const [showBatchBadgeDialog, setShowBatchBadgeDialog] = useState(false);
+  const [batchTargetBadge, setBatchTargetBadge] = useState<"" | "NEW" | "SALE" | "LOW_STOCK">("SALE");
 
   // Form State
   const [formData, setFormData] = useState({
@@ -164,6 +184,11 @@ export default function AdminProductsPage() {
     };
 
     setSavingProduct(true);
+    setOverlayLoading({
+      isVisible: true,
+      label: editingProduct ? "Updating Product..." : "Saving New Product...",
+      sublabel: `Syncing "${formData.name}" to Firestore`,
+    });
     try {
       if (editingProduct) {
         await updateProduct(editingProduct._id, payload);
@@ -181,18 +206,57 @@ export default function AdminProductsPage() {
       toast.error(err?.message || "Failed to save product. Please try again.");
     } finally {
       setSavingProduct(false);
+      setOverlayLoading({ isVisible: false, label: "" });
     }
   };
 
   const handleDelete = async (id: string, name: string) => {
     if (window.confirm(`Are you sure you want to remove "${name}" from the catalog?`)) {
+      setOverlayLoading({
+        isVisible: true,
+        label: "Deleting Product...",
+        sublabel: `Removing "${name}" from database`,
+      });
       try {
         await removeProduct(id);
+        setSelectedIds((prev) => prev.filter((item) => item !== id));
         toast.success(`Removed product "${name}"`);
       } catch (err: any) {
         console.error("Failed to delete product:", err);
         toast.error(err?.message || "Failed to delete product");
+      } finally {
+        setOverlayLoading({ isVisible: false, label: "" });
       }
+    }
+  };
+
+  // Quick Stock adjustments
+  const handleQuickStock = async (product: Product, delta: number) => {
+    const nextStock = Math.max(0, (product.stock || 0) + delta);
+    try {
+      await updateProduct(product._id, {
+        stock: nextStock,
+        available: nextStock > 0,
+      });
+      toast.success(`${product.name}: stock updated to ${nextStock}`);
+    } catch {
+      toast.error("Failed to update stock");
+    }
+  };
+
+  // Quick Availability toggle
+  const handleToggleAvailable = async (product: Product) => {
+    const nextAvail = !product.available;
+    try {
+      await updateProduct(product._id, {
+        available: nextAvail,
+        stock: nextAvail && product.stock === 0 ? 10 : product.stock,
+      });
+      toast.success(
+        `${product.name} is now ${nextAvail ? "AVAILABLE / IN-STOCK" : "UNAVAILABLE"}`
+      );
+    } catch {
+      toast.error("Failed to toggle availability");
     }
   };
 
@@ -203,95 +267,397 @@ export default function AdminProductsPage() {
     return products.filter((p) => p.category === activeCategoryFilter);
   }, [products, activeCategoryFilter]);
 
+  // Multi-select handlers
+  const isAllSelected = useMemo(() => {
+    if (filteredProducts.length === 0) return false;
+    return filteredProducts.every((p) => selectedIds.includes(p._id));
+  }, [filteredProducts, selectedIds]);
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredProducts.map((p) => p._id));
+    }
+  };
+
+  const toggleSelectProduct = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  // Batch Operations Handlers
+  const handleBatchDelete = async () => {
+    if (!selectedIds.length) return;
+    if (!window.confirm(`Delete ${selectedIds.length} selected product(s) permanently?`)) return;
+
+    setOverlayLoading({
+      isVisible: true,
+      label: "Batch Deleting Products...",
+      sublabel: `Removing ${selectedIds.length} items from Firestore`,
+    });
+    try {
+      await batchDeleteProducts(selectedIds);
+      toast.success(`Deleted ${selectedIds.length} products`);
+      setSelectedIds([]);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to batch delete products");
+    } finally {
+      setOverlayLoading({ isVisible: false, label: "" });
+    }
+  };
+
+  const handleBatchUpdateCategoryConfirm = async () => {
+    if (!selectedIds.length || !batchTargetCategory) return;
+    setShowBatchCategoryDialog(false);
+    setOverlayLoading({
+      isVisible: true,
+      label: "Updating Category...",
+      sublabel: `Moving ${selectedIds.length} items to "${batchTargetCategory}"`,
+    });
+    try {
+      await batchUpdateCategory(selectedIds, batchTargetCategory);
+      toast.success(`Updated category for ${selectedIds.length} products to "${batchTargetCategory}"`);
+      setSelectedIds([]);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to batch update categories");
+    } finally {
+      setOverlayLoading({ isVisible: false, label: "" });
+    }
+  };
+
+  const handleBatchSetAvailability = async (available: boolean) => {
+    if (!selectedIds.length) return;
+    setOverlayLoading({
+      isVisible: true,
+      label: available ? "Marking Products In-Stock..." : "Marking Products Out-of-Stock...",
+      sublabel: `Applying to ${selectedIds.length} selected items`,
+    });
+    try {
+      await batchSetAvailability(selectedIds, available);
+      toast.success(
+        `Marked ${selectedIds.length} products as ${available ? "Available" : "Unavailable"}`
+      );
+      setSelectedIds([]);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update availability");
+    } finally {
+      setOverlayLoading({ isVisible: false, label: "" });
+    }
+  };
+
+  const handleBatchSetBadgeConfirm = async () => {
+    if (!selectedIds.length) return;
+    setShowBatchBadgeDialog(false);
+    setOverlayLoading({
+      isVisible: true,
+      label: "Applying Promo Badges...",
+      sublabel: `Applying "${batchTargetBadge || "None"}" to ${selectedIds.length} products`,
+    });
+    try {
+      await batchSetBadge(selectedIds, batchTargetBadge);
+      toast.success(`Updated badge on ${selectedIds.length} products`);
+      setSelectedIds([]);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update badges");
+    } finally {
+      setOverlayLoading({ isVisible: false, label: "" });
+    }
+  };
+
   return (
-    <div className="p-3 sm:p-5 space-y-4 bg-white text-black min-h-screen">
+    <div className="p-2 sm:p-3 w-full max-w-full space-y-2.5 bg-white text-black min-h-screen pb-24">
+      <AdminOverlayLoader
+        isVisible={overlayLoading.isVisible}
+        label={overlayLoading.label}
+        sublabel={overlayLoading.sublabel}
+      />
+
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-200 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-200 pb-2">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => navigate("/admin")}
-            className="p-1 text-neutral-500 hover:text-black rounded"
+            className="p-1 text-neutral-500 hover:text-black rounded hover:bg-neutral-100 transition"
           >
             <ArrowLeft size={18} />
           </button>
           <div>
             <h1
-              className="text-black text-xl font-bold tracking-tight uppercase"
+              className="text-black text-lg sm:text-xl font-bold tracking-tight uppercase"
               style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
             >
               INVENTORY & BUNDLE MANAGEMENT
             </h1>
             <p
-              className="text-neutral-500 text-xs font-normal"
+              className="text-neutral-500 text-[11px] font-normal"
               style={{ fontFamily: "'Ubuntu', sans-serif" }}
             >
-              Stock levels, pricing, promotional badges and product catalog
+              Mobile-optimized vertical card catalog, live pricing & batch controls
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 self-end sm:self-auto">
           <button
             onClick={() => setShowCategoryModal(true)}
-            className="bg-white hover:bg-neutral-50 border border-neutral-300 text-neutral-800 px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs font-normal transition-colors"
+            className="min-h-[46.5px] h-[46.5px] bg-white hover:bg-neutral-50 border border-neutral-300 text-neutral-800 px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs font-normal transition-colors"
             style={{ fontFamily: "'Ubuntu', sans-serif" }}
           >
-            <FolderCog size={14} className="text-neutral-600" /> Manage Categories ({categories.length})
+            <FolderCog size={14} className="text-neutral-600" /> Categories ({categories.length})
           </button>
 
           <button
             onClick={handleOpenAdd}
-            className="bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs font-normal transition-colors"
+            className="min-h-[46.5px] h-[46.5px] bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs font-normal transition-colors"
             style={{ fontFamily: "'Ubuntu', sans-serif" }}
           >
-            <Plus size={15} /> Add New Product
+            <Plus size={15} /> Add Product
           </button>
         </div>
       </div>
 
-      {/* Category Filter Tabs */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-        <button
-          onClick={() => setActiveCategoryFilter("ALL")}
-          className={`px-3 py-1.5 rounded-xl text-xs font-normal whitespace-nowrap cursor-pointer transition-all ${
-            activeCategoryFilter === "ALL"
-              ? "bg-black text-white shadow-2xs"
-              : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"
-          }`}
-          style={{ fontFamily: "'Ubuntu', sans-serif" }}
-        >
-          All Items ({products.length})
-        </button>
-
-        <button
-          onClick={() => setActiveCategoryFilter("BUNDLES")}
-          className={`px-3 py-1.5 rounded-xl text-xs font-normal whitespace-nowrap cursor-pointer transition-all flex items-center gap-1 ${
-            activeCategoryFilter === "BUNDLES"
-              ? "bg-neutral-900 text-amber-300 shadow-2xs"
-              : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"
-          }`}
-          style={{ fontFamily: "'Ubuntu', sans-serif" }}
-        >
-          <Sparkles size={12} className="text-amber-400" /> Suggested Bundles (
-          {products.filter((p) => p.isCombination).length})
-        </button>
-
-        {categories.map((cat) => (
+      {/* Category Filter Tabs & Multi-Select Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none flex-1">
           <button
-            key={cat}
-            onClick={() => setActiveCategoryFilter(cat)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-normal whitespace-nowrap cursor-pointer transition-all ${
-              activeCategoryFilter === cat
+            onClick={() => setActiveCategoryFilter("ALL")}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-normal whitespace-nowrap cursor-pointer transition-all ${
+              activeCategoryFilter === "ALL"
                 ? "bg-black text-white shadow-2xs"
                 : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"
             }`}
             style={{ fontFamily: "'Ubuntu', sans-serif" }}
           >
-            {cat} ({productCountsByCategory[cat] || 0})
+            All Items ({products.length})
           </button>
-        ))}
+
+          <button
+            onClick={() => setActiveCategoryFilter("BUNDLES")}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-normal whitespace-nowrap cursor-pointer transition-all flex items-center gap-1 ${
+              activeCategoryFilter === "BUNDLES"
+                ? "bg-neutral-900 text-amber-300 shadow-2xs"
+                : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"
+            }`}
+            style={{ fontFamily: "'Ubuntu', sans-serif" }}
+          >
+            <Sparkles size={11} className="text-amber-400" /> Bundles (
+            {products.filter((p) => p.isCombination).length})
+          </button>
+
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategoryFilter(cat)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-normal whitespace-nowrap cursor-pointer transition-all ${
+                activeCategoryFilter === cat
+                  ? "bg-black text-white shadow-2xs"
+                  : "bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"
+              }`}
+              style={{ fontFamily: "'Ubuntu', sans-serif" }}
+            >
+              {cat} ({productCountsByCategory[cat] || 0})
+            </button>
+          ))}
+        </div>
+
+        {/* Select All Toggle */}
+        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+          <button
+            type="button"
+            onClick={toggleSelectAll}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border border-neutral-300 bg-neutral-50 hover:bg-neutral-100 text-neutral-800 transition cursor-pointer"
+          >
+            {isAllSelected ? (
+              <CheckSquare size={13} className="text-black" />
+            ) : (
+              <Square size={13} className="text-neutral-400" />
+            )}
+            <span>
+              {isAllSelected
+                ? "Deselect All"
+                : `Select All (${filteredProducts.length})`}
+            </span>
+          </button>
+        </div>
       </div>
+
+      {/* Floating Sticky Batch Action Bar when items are selected */}
+      {selectedIds.length > 0 && (
+        <div className="sticky bottom-3 z-40 bg-neutral-950 text-white rounded-2xl p-3 shadow-2xl border border-neutral-800 flex flex-wrap items-center justify-between gap-2.5 animate-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-amber-400 text-neutral-950 font-bold text-xs flex items-center justify-center font-mono">
+              {selectedIds.length}
+            </span>
+            <span className="text-xs font-semibold uppercase tracking-tight font-condensed">
+              {selectedIds.length === 1 ? "1 Item Selected" : `${selectedIds.length} Items Selected`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setBatchTargetCategory(categories[0] || "General");
+                setShowBatchCategoryDialog(true);
+              }}
+              className="min-h-[46.5px] h-[46.5px] px-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-100 rounded-xl text-xs font-medium flex items-center gap-1.5 border border-neutral-700 transition cursor-pointer"
+            >
+              <Tag size={13} className="text-amber-400" /> Category
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleBatchSetAvailability(true)}
+              className="min-h-[46.5px] h-[46.5px] px-3 bg-neutral-800 hover:bg-neutral-700 text-emerald-300 rounded-xl text-xs font-medium flex items-center gap-1.5 border border-neutral-700 transition cursor-pointer"
+            >
+              <CheckCircle2 size={13} /> In-Stock
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleBatchSetAvailability(false)}
+              className="min-h-[46.5px] h-[46.5px] px-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-xl text-xs font-medium flex items-center gap-1.5 border border-neutral-700 transition cursor-pointer"
+            >
+              <XCircle size={13} /> Out-Stock
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowBatchBadgeDialog(true)}
+              className="min-h-[46.5px] h-[46.5px] px-3 bg-neutral-800 hover:bg-neutral-700 text-blue-300 rounded-xl text-xs font-medium flex items-center gap-1.5 border border-neutral-700 transition cursor-pointer"
+            >
+              <Sparkles size={13} /> Badge
+            </button>
+
+            <button
+              type="button"
+              onClick={handleBatchDelete}
+              className="min-h-[46.5px] h-[46.5px] px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm active:scale-95"
+            >
+              <Trash2 size={14} /> Delete Selected ({selectedIds.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedIds([])}
+              className="min-h-[46.5px] min-w-[46.5px] h-[46.5px] w-[46.5px] flex items-center justify-center text-neutral-400 hover:text-white rounded-xl hover:bg-neutral-800 transition cursor-pointer"
+              title="Clear selection"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Update Category Dialog */}
+      {showBatchCategoryDialog && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full border border-neutral-300 shadow-2xl space-y-4 font-sans">
+            <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
+              <h3 className="text-sm font-bold uppercase font-condensed">
+                Change Category for {selectedIds.length} Items
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowBatchCategoryDialog(false)}
+                className="text-neutral-400 hover:text-black cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-neutral-600 font-medium">Select Target Category</label>
+              <select
+                value={batchTargetCategory}
+                onChange={(e) => setBatchTargetCategory(e.target.value)}
+                className="w-full px-3 py-2 bg-neutral-50 border border-neutral-300 rounded-xl text-xs outline-none focus:border-black font-medium"
+              >
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100">
+              <button
+                type="button"
+                onClick={() => setShowBatchCategoryDialog(false)}
+                className="px-3 py-1.5 border border-neutral-300 rounded-lg text-xs font-medium text-neutral-700 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleBatchUpdateCategoryConfirm}
+                className="px-4 py-1.5 bg-black text-white rounded-lg text-xs font-medium hover:bg-neutral-800 cursor-pointer"
+              >
+                Apply to {selectedIds.length} Products
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Update Badge Dialog */}
+      {showBatchBadgeDialog && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full border border-neutral-300 shadow-2xl space-y-4 font-sans">
+            <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
+              <h3 className="text-sm font-bold uppercase font-condensed">
+                Set Badge for {selectedIds.length} Items
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowBatchBadgeDialog(false)}
+                className="text-neutral-400 hover:text-black cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: "", label: "No Badge (Clear)" },
+                { id: "NEW", label: "NEW" },
+                { id: "SALE", label: "SALE" },
+                { id: "LOW_STOCK", label: "LOW STOCK" },
+              ].map((badgeOption) => (
+                <button
+                  key={badgeOption.id}
+                  type="button"
+                  onClick={() => setBatchTargetBadge(badgeOption.id as any)}
+                  className={`p-2 rounded-xl border text-xs font-medium text-center transition cursor-pointer ${
+                    batchTargetBadge === badgeOption.id
+                      ? "bg-black text-white border-black font-bold"
+                      : "bg-neutral-50 text-neutral-700 border-neutral-300 hover:bg-neutral-100"
+                  }`}
+                >
+                  {badgeOption.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100">
+              <button
+                type="button"
+                onClick={() => setShowBatchBadgeDialog(false)}
+                className="px-3 py-1.5 border border-neutral-300 rounded-lg text-xs font-medium text-neutral-700 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleBatchSetBadgeConfirm}
+                className="px-4 py-1.5 bg-black text-white rounded-lg text-xs font-medium hover:bg-neutral-800 cursor-pointer"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Category Manager Modal */}
       <CategoryManagerModal
@@ -299,99 +665,126 @@ export default function AdminProductsPage() {
         onClose={() => setShowCategoryModal(false)}
         categories={categories}
         productCounts={productCountsByCategory}
-        onAddCategory={(name) => {
-          const success = addCategory(name);
-          if (success) toast.success(`Added category "${name}"`);
-          return success;
+        onAddCategory={async (name) => {
+          setOverlayLoading({
+            isVisible: true,
+            label: "Adding Category...",
+            sublabel: `Creating "${name}" in Firestore`,
+          });
+          try {
+            const success = await addCategory(name);
+            if (success) toast.success(`Added category "${name}"`);
+            return success;
+          } finally {
+            setOverlayLoading({ isVisible: false, label: "" });
+          }
         }}
-        onEditCategory={(oldName, newName) => {
-          const success = editCategory(oldName, newName);
-          if (success) toast.success(`Renamed category to "${newName}"`);
-          return success;
+        onEditCategory={async (oldName, newName) => {
+          setOverlayLoading({
+            isVisible: true,
+            label: "Renaming Category...",
+            sublabel: `Updating products from "${oldName}" to "${newName}"`,
+          });
+          try {
+            const success = await editCategory(oldName, newName);
+            if (success) toast.success(`Renamed category to "${newName}"`);
+            return success;
+          } finally {
+            setOverlayLoading({ isVisible: false, label: "" });
+          }
         }}
-        onRemoveCategory={(name) => {
-          const success = removeCategory(name);
-          if (success) toast.success(`Deleted category "${name}"`);
-          return success;
+        onRemoveCategory={async (name) => {
+          setOverlayLoading({
+            isVisible: true,
+            label: "Deleting Category...",
+            sublabel: `Reassigning products from "${name}" to General`,
+          });
+          try {
+            const success = await removeCategory(name);
+            if (success) toast.success(`Deleted category "${name}"`);
+            return success;
+          } finally {
+            setOverlayLoading({ isVisible: false, label: "" });
+          }
         }}
       />
 
       {/* Add / Edit Product Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs overflow-y-auto">
-          <form
-            onSubmit={handleSubmit}
-            className="bg-white p-5 sm:p-6 rounded-2xl w-full max-w-2xl space-y-4 shadow-2xl border border-neutral-200 my-8 max-h-[90vh] overflow-y-auto"
-          >
-            {/* Modal Header */}
-            <div className="flex justify-between items-center border-b border-neutral-100 pb-3">
-              <div>
-                <h2
-                  className="text-lg font-normal text-black uppercase"
-                  style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
-                >
-                  {editingProduct ? "Edit Product Details" : "Add New Product"}
-                </h2>
-                <p
-                  className="text-xs text-neutral-500 font-normal"
-                  style={{ fontFamily: "'Ubuntu', sans-serif" }}
-                >
-                  Configure product info, stock, promotion combinations, and badges
-                </p>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-xl border border-neutral-200 shadow-2xl p-4 sm:p-5 space-y-4 my-8">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center">
+                  <Package size={16} />
+                </div>
+                <div>
+                  <h2
+                    className="text-base font-bold uppercase text-black"
+                    style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+                  >
+                    {editingProduct ? "Edit Product Details" : "Add New Catalog Product"}
+                  </h2>
+                  <p
+                    className="text-xs text-neutral-500 font-normal"
+                    style={{ fontFamily: "'Ubuntu', sans-serif" }}
+                  >
+                    {formData.isCombination
+                      ? "Combination Bundle item linked to child products"
+                      : "Standard retail catalog item"}
+                  </p>
+                </div>
               </div>
               <button
-                type="button"
                 onClick={() => setShowForm(false)}
-                className="text-neutral-400 hover:text-black cursor-pointer p-1.5 rounded-lg hover:bg-neutral-100"
+                className="text-neutral-400 hover:text-black cursor-pointer p-1 rounded-lg hover:bg-neutral-100 transition"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-4 font-normal text-xs" style={{ fontFamily: "'Ubuntu', sans-serif", fontSize: "14px" }}>
-              {/* Product Title & Sub-name */}
+            <form onSubmit={handleSubmit} className="space-y-4 font-normal text-xs">
+              {/* Product Image Uploader */}
+              <ProductImageUploader
+                currentImage={formData.image}
+                onImageChange={(url) => setFormData((prev) => ({ ...prev, image: url || "" }))}
+              />
+
+              {/* Basic Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-neutral-600 uppercase block mb-1">Product Title *</label>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-700">Product Name *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Wireless Pro Studio Headphones"
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-black font-medium"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g. Sony WH-1000XM5"
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-black"
                   />
                 </div>
 
-                <div>
-                  <label className="text-neutral-600 uppercase block mb-1">Sub-name / Tagline</label>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-700">
+                    Subtitle / Model (Optional)
+                  </label>
                   <input
                     type="text"
-                    placeholder="e.g. Active Noise Cancelling • Spatial Audio"
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-black"
                     value={formData.subname}
                     onChange={(e) => setFormData({ ...formData, subname: e.target.value })}
+                    placeholder="e.g. Midnight Black / 2024"
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-black"
                   />
                 </div>
               </div>
 
-              {/* Category & Stock Available */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-neutral-600 uppercase block">Category</label>
-                    <button
-                      type="button"
-                      onClick={() => setShowCategoryModal(true)}
-                      className="text-[11px] text-neutral-600 hover:text-black underline cursor-pointer"
-                    >
-                      + Manage Categories
-                    </button>
-                  </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-700">Category *</label>
                   <select
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-black"
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-black"
                   >
                     {categories.map((c) => (
                       <option key={c} value={c}>
@@ -401,202 +794,153 @@ export default function AdminProductsPage() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-neutral-600 uppercase block mb-1">Stocks Available *</label>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-700">Stock Units *</label>
                   <input
                     type="number"
-                    min="0"
                     required
-                    placeholder="Inventory count"
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-black font-mono"
+                    min="0"
                     value={formData.stock}
                     onChange={(e) => setFormData({ ...formData, stock: Number(e.target.value) })}
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-black"
                   />
                 </div>
               </div>
 
-              {/* Description */}
-              <div>
-                <label className="text-neutral-600 uppercase block mb-1">Product Description</label>
-                <textarea
-                  rows={2}
-                  placeholder="Detailed specifications and features..."
-                  className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-black resize-none"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-
-              {/* Product Image: Only allow image upload and not URL */}
-              <ProductImageUploader
-                currentImage={formData.image}
-                onImageChange={(dataUrl) => setFormData({ ...formData, image: dataUrl })}
-              />
-
-              {/* Promotional Combination / Bundle Switch */}
-              <div className="bg-neutral-50 border border-neutral-200/90 rounded-2xl p-3.5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <Sparkles size={14} className="text-amber-500" />
-                      <span
-                        className="text-xs font-semibold text-black uppercase tracking-tight"
-                        style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
-                      >
-                        Combine the product for promotion (Bundle)
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-neutral-500 font-normal">
-                      When enabled, this product behaves as a "Suggested Bundle", automatically combining multiple catalog items.
-                    </p>
-                  </div>
-
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.isCombination}
-                      onChange={(e) => {
-                        const enabled = e.target.checked;
-                        setFormData({
-                          ...formData,
-                          isCombination: enabled,
-                          subname: enabled && !formData.subname ? "Suggested Bundle" : formData.subname,
-                          bundleItems:
-                            enabled && formData.bundleItems.length === 0
-                              ? [
-                                  {
-                                    productId: products.find((p) => p._id !== editingProduct?._id)?._id || products[0]?._id || "",
-                                    pricingType: "percentage_off",
-                                    discountPercent: 15,
-                                  },
-                                ]
-                              : formData.bundleItems,
-                        });
-                      }}
-                      className="sr-only peer"
-                    />
-                    <div className="w-10 h-5 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-black"></div>
+              {/* Pricing & Costing */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-700">
+                    {formData.isCombination ? "Bundle Retail (Auto)" : "Regular Price *"}
                   </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required={!formData.isCombination}
+                    disabled={formData.isCombination}
+                    value={
+                      formData.isCombination
+                        ? calculatedBundlePrice ?? formData.price
+                        : formData.price
+                    }
+                    onChange={(e) =>
+                      setFormData({ ...formData, price: Number(e.target.value) })
+                    }
+                    className="w-full bg-neutral-50 disabled:bg-neutral-100 border border-neutral-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-black font-mono font-semibold"
+                  />
                 </div>
 
-                {/* Collapsible Combination Configuration */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-700">
+                    Sale Price (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={formData.isCombination}
+                    value={formData.salePrice}
+                    onChange={(e) => setFormData({ ...formData, salePrice: e.target.value })}
+                    placeholder="e.g. 79.99"
+                    className="w-full bg-neutral-50 disabled:bg-neutral-100 border border-neutral-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-black font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-700">
+                    Costing (Margin calc)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.costing}
+                    onChange={(e) => setFormData({ ...formData, costing: e.target.value })}
+                    placeholder="e.g. 45.00"
+                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-xs outline-none focus:border-black font-mono text-neutral-600"
+                  />
+                </div>
+              </div>
+
+              {/* Promotional Badge Selector */}
+              <ProductBadgeSelector
+                badge={formData.badge}
+                badgeExpiry={formData.badgeExpiry}
+                onBadgeChange={(badge) => setFormData((prev) => ({ ...prev, badge }))}
+                onExpiryChange={(badgeExpiry) => setFormData((prev) => ({ ...prev, badgeExpiry }))}
+              />
+
+              {/* Combination Bundle Builder Section */}
+              <div className="border border-neutral-200 rounded-2xl p-3 bg-neutral-50/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles size={15} className="text-amber-500" />
+                    <div>
+                      <span className="font-semibold text-neutral-900 font-condensed uppercase text-sm">
+                        Suggested Bundle / Combination
+                      </span>
+                      <p className="text-[10px] text-neutral-500">
+                        Bundle multiple catalog products with custom discounting
+                      </p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="isCombinationToggle"
+                    checked={formData.isCombination}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, isCombination: e.target.checked }))
+                    }
+                    className="w-4 h-4 rounded text-black focus:ring-0 cursor-pointer"
+                  />
+                </div>
+
                 {formData.isCombination && (
                   <ProductBundleManager
                     bundleItems={formData.bundleItems}
                     availableProducts={products}
                     currentProductId={editingProduct?._id}
-                    onUpdateBundleItems={(items) =>
-                      setFormData({ ...formData, bundleItems: items })
+                    onUpdateBundleItems={(newItems) =>
+                      setFormData((prev) => ({ ...prev, bundleItems: newItems }))
                     }
                   />
                 )}
               </div>
 
-              {/* Pricing & Costing Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Price (Disabled if Combination is enabled) */}
-                <div>
-                  <label className="text-neutral-600 uppercase block mb-1">
-                    Selling Price ($ USD) *
-                    {formData.isCombination && (
-                      <span className="text-amber-600 ml-1">(Auto-calculated)</span>
-                    )}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                    disabled={formData.isCombination}
-                    placeholder="0.00"
-                    className={`w-full border rounded-xl px-3 py-2 text-sm outline-none font-mono ${
-                      formData.isCombination
-                        ? "bg-neutral-100 border-neutral-300 text-neutral-700 cursor-not-allowed font-bold"
-                        : "bg-neutral-50 border-neutral-300 focus:border-black"
-                    }`}
-                    value={
-                      formData.isCombination && calculatedBundlePrice !== null
-                        ? calculatedBundlePrice
-                        : formData.price
-                    }
-                    onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
-                  />
-                </div>
-
-                {/* Sale Price (Only for single items) */}
-                <div>
-                  <label className="text-neutral-600 uppercase block mb-1">
-                    Sale Price ($ USD)
-                    {formData.isCombination && <span className="text-neutral-400 ml-1">(N/A for Bundle)</span>}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    disabled={formData.isCombination}
-                    placeholder="Optional Discount"
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-black font-mono disabled:opacity-40 disabled:cursor-not-allowed"
-                    value={formData.salePrice}
-                    onChange={(e) => setFormData({ ...formData, salePrice: e.target.value })}
-                  />
-                </div>
-
-                {/* Costing */}
-                <div>
-                  <label className="text-neutral-600 uppercase block mb-1">
-                    Costing ($ USD)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Unit Cost Expense"
-                    className="w-full bg-neutral-50 border border-neutral-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-black font-mono"
-                    value={formData.costing}
-                    onChange={(e) => setFormData({ ...formData, costing: e.target.value })}
-                  />
-                </div>
+              {/* Form Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-100">
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  disabled={savingProduct}
+                  className="px-4 py-2 rounded-xl border border-neutral-300 text-neutral-700 hover:bg-neutral-50 text-xs font-normal cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingProduct}
+                  className="bg-black hover:bg-neutral-800 disabled:bg-neutral-400 text-white px-5 py-2 rounded-xl text-xs font-normal flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                >
+                  {savingProduct ? (
+                    "Saving..."
+                  ) : (
+                    <>
+                      <Check size={14} /> {editingProduct ? "Update Product" : "Create Product"}
+                    </>
+                  )}
+                </button>
               </div>
-
-              {/* Dynamic Badges (NEW, SALE, LOW_STOCK) & Custom Expiry Dates */}
-              <ProductBadgeSelector
-                badge={formData.badge}
-                badgeExpiry={formData.badgeExpiry}
-                onBadgeChange={(b) => setFormData({ ...formData, badge: b })}
-                onExpiryChange={(exp) => setFormData({ ...formData, badgeExpiry: exp })}
-              />
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="px-4 py-2 rounded-xl text-xs text-neutral-600 hover:bg-neutral-100 cursor-pointer font-normal"
-                style={{ fontFamily: "'Ubuntu', sans-serif" }}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={savingProduct}
-                className="bg-black disabled:bg-neutral-400 text-white px-5 py-2 rounded-xl text-xs cursor-pointer hover:bg-neutral-800 shadow-xs font-normal transition-colors"
-                style={{ fontFamily: "'Ubuntu', sans-serif" }}
-              >
-                {savingProduct ? "Saving..." : editingProduct ? "Save Changes" : "Create Product"}
-              </button>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
       )}
 
-      {/* Products Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Compact Portrait-Optimized Vertical Stacked Product Cards */}
+      <div className="flex-1 w-full flex flex-col gap-3">
         {loading ? (
-          <ProductListSkeleton count={6} />
+          <ProductListSkeleton count={4} />
         ) : filteredProducts.length === 0 ? (
-          <div className="col-span-full bg-white border border-neutral-200 rounded-2xl p-12 text-center text-neutral-400">
-            <Package size={40} className="mx-auto mb-2 opacity-30" />
+          <div className="bg-white border border-neutral-200 rounded-2xl p-8 text-center text-neutral-400 space-y-2">
+            <ShoppingBag size={32} className="mx-auto text-neutral-300" />
             <p className="text-sm font-normal" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
               No products match the selected filters
             </p>
@@ -607,19 +951,88 @@ export default function AdminProductsPage() {
             const hasCosting = typeof product.costing === "number" && product.costing > 0;
             const currentPrice = product.salePrice ?? product.price;
             const profit = hasCosting ? currentPrice - (product.costing ?? 0) : null;
-            const margin = hasCosting && currentPrice > 0 ? Math.round(((profit ?? 0) / currentPrice) * 100) : null;
+            const isSelected = selectedIds.includes(product._id);
+            const isLowStock = product.stock > 0 && product.stock <= 5;
+            const isOutOfStock = product.stock <= 0 || product.available === false;
 
             return (
-              <div
+              <motion.div
                 key={product._id}
-                className={`bg-white border rounded-2xl p-4 shadow-2xs flex flex-col justify-between transition-all ${
-                  product.isCombination ? "border-amber-300/80 ring-1 ring-amber-200/50" : "border-neutral-200"
+                drag="x"
+                dragConstraints={{ left: -100, right: 0 }}
+                onDragEnd={(_, info) => {
+                  if (info.offset.x < -50) {
+                    handleDelete(product._id, product.name);
+                  }
+                }}
+                className={`bg-white border rounded-2xl p-3 shadow-2xs transition-all relative flex flex-col gap-3 ${
+                  isSelected
+                    ? "border-black ring-1 ring-black bg-neutral-50/40"
+                    : product.isCombination
+                    ? "border-amber-300 bg-amber-50/15"
+                    : "border-neutral-200 hover:border-neutral-300"
                 }`}
               >
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
+                {/* Absolute Top-Right Badges */}
+                <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10 pointer-events-none">
+                  {/* BUNDLED badge if product is combination bundle */}
+                  {product.isCombination && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shadow-2xs text-white bg-amber-500 font-condensed tracking-wide">
+                      BUNDLED
+                    </span>
+                  )}
+
+                  {/* Promo Badge if present */}
+                  {product.badge && (
+                    <span
+                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded shadow-2xs text-white ${
+                        product.badge === "NEW"
+                          ? "bg-blue-600"
+                          : product.badge === "SALE"
+                          ? "bg-red-600"
+                          : "bg-amber-500"
+                      }`}
+                    >
+                      {product.badge}
+                    </span>
+                  )}
+
+                  {/* Stock Status Pill */}
+                  <span
+                    className={`text-[9px] font-mono px-2 py-0.5 rounded font-semibold ${
+                      isOutOfStock
+                        ? "bg-red-100 text-red-700 border border-red-200"
+                        : isLowStock
+                        ? "bg-amber-100 text-amber-800 border border-amber-300"
+                        : "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                    }`}
+                  >
+                    {isOutOfStock
+                      ? "Out of Stock"
+                      : isLowStock
+                      ? `Low: ${product.stock}`
+                      : `Stock: ${product.stock}`}
+                  </span>
+                </div>
+
+                {/* Top Section: 48px Checkbox Hit Area + Thumbnail + Identity */}
+                <div className="flex items-start gap-2.5 pr-28">
+                  {/* Multi-select checkbox with 48px minimum touch target */}
+                  <button
+                    type="button"
+                    onClick={() => toggleSelectProduct(product._id)}
+                    className="min-w-[48px] min-h-[48px] -ml-2 -mt-2 flex items-center justify-center text-neutral-400 hover:text-black transition cursor-pointer shrink-0 rounded-xl"
+                    title={isSelected ? "Deselect item" : "Select item"}
+                  >
+                    {isSelected ? (
+                      <CheckSquare size={18} className="text-black" />
+                    ) : (
+                      <Square size={18} className="text-neutral-300 hover:text-neutral-500" />
+                    )}
+                  </button>
+
                   {/* Thumbnail */}
-                  <div className="w-16 h-16 rounded-xl bg-neutral-50 border border-neutral-100 p-1 shrink-0 flex items-center justify-center overflow-hidden">
+                  <div className="w-14 h-14 rounded-xl bg-neutral-50 border border-neutral-200 p-1 shrink-0 flex items-center justify-center overflow-hidden">
                     {product.image ? (
                       <img
                         src={product.image}
@@ -628,147 +1041,180 @@ export default function AdminProductsPage() {
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <ShoppingBag size={24} className="text-neutral-300" />
+                      <ShoppingBag size={20} className="text-neutral-300" />
                     )}
                   </div>
 
-                  {/* Info */}
+                  {/* Identity */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <h3
-                        className="font-normal text-black text-base truncate"
+                        className="font-bold text-black text-sm leading-tight truncate"
                         style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
                       >
                         {product.name}
                       </h3>
-                      {product.isCombination && (
-                        <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded-full font-semibold flex items-center gap-0.5">
-                          <Sparkles size={10} className="text-amber-600" /> Suggested Bundle
-                        </span>
-                      )}
                     </div>
 
-                    <div
-                      className="text-xs text-neutral-500 font-normal truncate"
-                      style={{ fontFamily: "'Ubuntu', sans-serif" }}
-                    >
-                      {product.category ?? "General"} • {product.stock} in stock
-                      {product.subname && ` • ${product.subname}`}
-                    </div>
-
-                    {/* Pricing Display */}
-                    <div className="mt-1 flex items-baseline gap-2 flex-wrap">
-                      <span
-                        className="text-black font-semibold text-base"
-                        style={{ fontFamily: "'Ubuntu', sans-serif" }}
+                    {/* Sub-name placeholder: Shows VIEW BUNDLE hyperlink if bundled, otherwise subname */}
+                    {product.isCombination || (product.bundleItems && product.bundleItems.length > 0) ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingBundleProduct(product);
+                        }}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:text-amber-900 underline underline-offset-2 font-mono cursor-pointer mt-0.5 tracking-tight hover:opacity-80 transition"
                       >
-                        {formatCurrency(currentPrice)}
+                        <Sparkles size={10} className="text-amber-500 shrink-0" />
+                        <span>VIEW BUNDLE ({product.bundleItems?.length || 0} ITEMS)</span>
+                      </button>
+                    ) : product.subname ? (
+                      <div className="text-[10px] text-neutral-500 font-sans truncate mt-0.5">
+                        {product.subname}
+                      </div>
+                    ) : null}
+
+                    <div className="mt-1 flex items-center gap-1.5 text-[10px] text-neutral-500 font-sans flex-wrap">
+                      <span className="px-1.5 py-0.2 bg-neutral-100 rounded text-neutral-700 font-medium">
+                        {product.category || "General"}
                       </span>
-                      {product.salePrice && !product.isCombination && (
-                        <span className="text-xs text-red-500 line-through">
-                          {formatCurrency(product.price)}
-                        </span>
-                      )}
+                      <span>•</span>
+                      <span
+                        className={
+                          product.available !== false ? "text-emerald-700 font-medium" : "text-neutral-400"
+                        }
+                      >
+                        {product.available !== false ? "Active" : "Hidden"}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Badges & Expiry Details */}
-                {product.badge && (
-                  <div className="bg-neutral-50 rounded-xl p-2 border border-neutral-200/70 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full text-white ${
-                          product.badge === "NEW"
-                            ? "bg-blue-600"
-                            : product.badge === "SALE"
-                            ? "bg-red-600"
-                            : "bg-amber-500"
-                        }`}
-                      >
-                        {product.badge}
+                {/* Middle Section: Price, Promo details & Profit */}
+                <div className="flex flex-wrap items-baseline justify-between gap-1.5 pt-1.5 border-t border-neutral-100 text-xs">
+                  <div className="flex items-baseline gap-1.5">
+                    <span
+                      className="text-black font-bold text-base font-mono"
+                      style={{ fontFamily: "'Ubuntu', sans-serif" }}
+                    >
+                      {formatCurrency(currentPrice)}
+                    </span>
+                    {product.salePrice && !product.isCombination && (
+                      <span className="text-[10px] text-red-500 line-through">
+                        {formatCurrency(product.price)}
                       </span>
-                      {product.badgeExpiry && (
-                        <span className="text-[10px] text-neutral-500 font-mono">
-                          {isBadgeCurrentlyActive ? (
-                            `Expires ${new Date(product.badgeExpiry).toLocaleDateString()}`
-                          ) : (
-                            <span className="text-red-600 font-semibold flex items-center gap-0.5">
-                              <AlertTriangle size={10} /> Expired
-                            </span>
-                          )}
-                        </span>
-                      )}
-                    </div>
-                    {!product.badgeExpiry && (
-                      <span className="text-[10px] text-neutral-400 font-mono">No expiry</span>
+                    )}
+                    {hasCosting && (
+                      <span className="text-[10px] text-neutral-400 font-mono">
+                        (Cost: {formatCurrency(product.costing ?? 0)} • Profit: {formatCurrency(profit ?? 0)})
+                      </span>
                     )}
                   </div>
-                )}
 
-                {/* If Suggested Bundle: Show included products */}
-                {product.isCombination && product.bundleItems && product.bundleItems.length > 0 && (
-                  <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-2 space-y-1">
-                    <div className="text-[10px] text-amber-900 font-semibold uppercase flex items-center justify-between">
-                      <span>Included in Bundle ({product.bundleItems.length} items):</span>
-                      <span className="text-amber-700 font-mono">Suggested Bundle</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {product.bundleItems.map((bi, idx) => {
-                        const targetProd = products.find((p) => p._id === bi.productId);
-                        return (
-                          <span
-                            key={idx}
-                            className="text-[10px] bg-white border border-amber-200 text-neutral-800 px-1.5 py-0.5 rounded flex items-center gap-1"
-                          >
-                            <span className="font-medium truncate max-w-[110px]">
-                              {targetProd?.name ?? "Catalog Item"}
-                            </span>
-                            <span className="text-neutral-400">
-                              {bi.pricingType === "percentage_off"
-                                ? `(-${bi.discountPercent}%)`
-                                : `(${formatCurrency(bi.customPrice ?? 0)})`}
-                            </span>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Costing & Profit Margin Badge */}
-                {hasCosting && (
-                  <div className="flex items-center justify-between text-[11px] text-neutral-500 font-mono pt-1">
-                    <span>Costing: {formatCurrency(product.costing ?? 0)}</span>
-                    <span className="text-emerald-700 font-medium">
-                      Profit: {formatCurrency(profit ?? 0)} ({margin}%)
+                  {product.badgeExpiry && (
+                    <span className="text-[10px] text-neutral-400 font-mono">
+                      {isBadgeCurrentlyActive
+                        ? `Exp: ${new Date(product.badgeExpiry).toLocaleDateString()}`
+                        : "Badge Expired"}
                     </span>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-neutral-100">
-                <button
-                  onClick={() => handleOpenEdit(product)}
-                  className="flex items-center gap-1 text-xs text-neutral-700 hover:text-black border border-neutral-200 px-3 py-1.5 rounded-lg hover:bg-neutral-50 cursor-pointer transition-colors"
-                  style={{ fontFamily: "'Ubuntu', sans-serif" }}
-                >
-                  <Edit2 size={13} /> Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(product._id, product.name)}
-                  className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50 cursor-pointer transition-colors"
-                  style={{ fontFamily: "'Ubuntu', sans-serif" }}
-                >
-                  <Trash2 size={13} /> Remove
-                </button>
-              </div>
-              </div>
+                {/* Bottom Section: 48px Minimum Touch Target Action Controls */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-neutral-100">
+                  {/* Quick Stock Controls (48px Touch Steppers) */}
+                  <div className="flex items-center gap-1 font-condensed">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickStock(product, -1)}
+                      className="min-w-[46.5px] min-h-[46.5px] h-[46.5px] w-[46.5px] rounded-xl border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-800 flex items-center justify-center text-lg font-bold transition active:scale-95 cursor-pointer shadow-2xs"
+                      title="Decrease stock"
+                    >
+                      -
+                    </button>
+                    <span className="w-9 text-center text-sm font-mono font-bold">
+                      {product.stock}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickStock(product, 1)}
+                      className="min-w-[46.5px] min-h-[46.5px] h-[46.5px] w-[46.5px] rounded-xl border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-800 flex items-center justify-center text-lg font-bold transition active:scale-95 cursor-pointer shadow-2xs"
+                      title="Increase stock"
+                    >
+                      +
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAvailable(product)}
+                      className={`min-h-[46.5px] h-[46.5px] px-3.5 rounded-xl text-xs font-semibold border flex items-center gap-1 transition active:scale-95 cursor-pointer ${
+                        product.available !== false
+                          ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                          : "bg-neutral-100 text-neutral-600 border-neutral-200 hover:bg-neutral-200"
+                      }`}
+                      title="Toggle availability"
+                    >
+                      {product.available !== false ? (
+                        <>
+                          <Eye size={13} /> Active
+                        </>
+                      ) : (
+                        <>
+                          <EyeOff size={13} /> Hidden
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Edit / Delete Buttons with 48px minimum touch targets */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleOpenEdit(product)}
+                      className="min-h-[46.5px] h-[46.5px] px-4 flex items-center gap-1.5 text-xs font-semibold text-neutral-800 hover:text-black border border-neutral-300 rounded-xl hover:bg-neutral-50 cursor-pointer transition active:scale-95 shadow-2xs"
+                      style={{ fontFamily: "'Ubuntu', sans-serif" }}
+                    >
+                      <Edit2 size={13} /> Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(product._id, product.name)}
+                      className="min-h-[46.5px] h-[46.5px] px-4 flex items-center gap-1.5 text-xs font-semibold text-red-600 hover:text-red-700 border border-red-200 rounded-xl hover:bg-red-50 cursor-pointer transition active:scale-95 shadow-2xs"
+                      style={{ fontFamily: "'Ubuntu', sans-serif" }}
+                    >
+                      <Trash2 size={13} /> Remove
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
             );
           })
         )}
       </div>
+
+      <AdminActionDrawer
+        isVisible={selectedIds.length > 0}
+        selectedCount={selectedIds.length}
+        onDelete={handleBatchDelete}
+        onUpdateCategory={() => setShowBatchCategoryDialog(true)}
+        onExport={() => {
+          const data = JSON.stringify(products.filter(p => selectedIds.includes(p._id)));
+          const blob = new Blob([data], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'products.json';
+          a.click();
+        }}
+        onClose={() => setSelectedIds([])}
+      />
+
+      {/* Interactive Bundle Breakdown Modal */}
+      <BundleViewModal
+        bundleProduct={viewingBundleProduct}
+        allProducts={products}
+        onClose={() => setViewingBundleProduct(null)}
+        onEditProduct={(p) => handleOpenEdit(p)}
+      />
     </div>
   );
 }

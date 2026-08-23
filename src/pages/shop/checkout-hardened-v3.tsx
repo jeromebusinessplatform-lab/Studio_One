@@ -13,7 +13,6 @@ import {
   ShoppingBag,
   Truck,
   User,
-  Phone,
   Tag,
   AlertCircle,
 } from "lucide-react";
@@ -48,16 +47,24 @@ type Quote = {
 };
 
 const STEP_ITEMS = [
-  { id: 1 as Step, label: "Receiver" },
-  { id: 2 as Step, label: "Delivery" },
-  { id: 3 as Step, label: "Review" },
-  { id: 4 as Step, label: "Payment" },
+  { id: 1 as Step, label: "RECEIVER" },
+  { id: 2 as Step, label: "DELIVERY" },
+  { id: 3 as Step, label: "REVIEW" },
+  { id: 4 as Step, label: "PAYMENT" },
 ] as const;
+
+// Helper to format Philippine phone numbers cleanly: 0919 123 1122
+function formatContactNumber(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 4)} ${digits.slice(4)}`;
+  return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 11)}`;
+}
 
 export default function CheckoutPage() {
   const { items, subtotal, selectedItems, selectedSubtotal, removeSelectedItems, clearCart } = useCart();
   const { customer } = useTelegram();
-  const { createOrder } = useOrders(customer?.telegramUserId);
+  const { orders, createOrder } = useOrders(customer?.telegramUserId);
   const { couriers, calculateDeliveryCharge } = useCouriers();
   const navigate = useNavigate();
 
@@ -66,7 +73,9 @@ export default function CheckoutPage() {
   const itemsKey = useMemo(() => checkoutItems.map((i) => `${i.productId}:${i.quantity}`).join("|"), [checkoutItems]);
 
   const [step, setStep] = useState<Step>(1);
-  const [receiver, setReceiver] = useState(customer?.telegramDisplayName || "");
+
+  // Receiver Information - do NOT auto-populate from extracted Telegram context
+  const [receiver, setReceiver] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [courierId, setCourierId] = useState("");
@@ -81,18 +90,40 @@ export default function CheckoutPage() {
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Load recently used addresses persisted from past orders and local storage
+  const [recentAddresses, setRecentAddresses] = useState<string[]>([]);
+
+  useEffect(() => {
+    const storageKey = `prime_recent_addresses_${customer?.telegramUserId || "guest"}`;
+    const savedLocal = localStorage.getItem(storageKey);
+    let parsed: string[] = [];
+    if (savedLocal) {
+      try {
+        parsed = JSON.parse(savedLocal);
+      } catch {
+        parsed = [];
+      }
+    }
+
+    // Merge from customer's previous orders
+    const orderAddresses = orders.map((o) => o.deliveryAddress).filter(Boolean);
+    const combined = Array.from(new Set([...parsed, ...orderAddresses])).filter(
+      (addr) => typeof addr === "string" && addr.trim().length > 3
+    );
+
+    setRecentAddresses(combined.slice(0, 5));
+  }, [customer?.telegramUserId, orders]);
+
   const {
     addressInput,
     setAddressInput,
     suggestions,
     isLoading: geoLoading,
-    isLocating,
     isOpen: geoOpen,
     setIsOpen: setGeoOpen,
     selectedLocation,
     selectSuggestion,
-    detectCurrentLocation,
-    detectIpLocation,
+    selectAddressString,
     routeInfo,
     isCalculatingRoute,
     geoConfig,
@@ -158,19 +189,19 @@ export default function CheckoutPage() {
 
   const validateReceiver = () => {
     if (!customer?.telegramUserId) {
-      toast.error("Open checkout from Telegram to continue.");
+      toast.error("Open checkout from Telegram or as a guest to continue.");
       return false;
     }
     if (receiver.trim().length < 2) {
       toast.error("Enter the receiver name.");
       return false;
     }
-    if (!/^[0-9+()\-\s]{7,30}$/.test(phone.trim())) {
-      toast.error("Enter a valid contact phone number.");
+    if (!/^[0-9\s]{10,13}$/.test(phone.trim()) && phone.replace(/\D/g, "").length < 10) {
+      toast.error("Enter a valid 11-digit contact phone number (e.g. 0919 123 1122).");
       return false;
     }
     if (!addressInput.trim() || !selectedLocation) {
-      toast.error("Select a delivery address from the suggested addresses.");
+      toast.error("Please enter and select a delivery address.");
       return false;
     }
     return true;
@@ -230,10 +261,10 @@ export default function CheckoutPage() {
     setSubmitting(true);
     try {
       const created = await createOrder({
-        telegramDisplayName: customer?.telegramDisplayName || receiver,
+        telegramDisplayName: customer?.telegramDisplayName || receiver.trim(),
         telegramUsername: customer?.telegramUsername,
         items: checkoutItems.map((item) => ({ productId: item.productId, quantity: item.quantity })),
-        receiverName: receiver.trim(),
+        receiverName: receiver.trim().toUpperCase(),
         contactNumber: phone.trim(),
         deliveryAddress: addressInput.trim(),
         deliveryProviderId: selectedCourier?.id,
@@ -247,6 +278,13 @@ export default function CheckoutPage() {
         receiptUrl: receiptUrl || undefined,
         receiptOcrData: ocrResult || undefined,
       });
+
+      // Save confirmed delivery address to persistent recent addresses
+      if (addressInput.trim()) {
+        const storageKey = `prime_recent_addresses_${customer?.telegramUserId || "guest"}`;
+        const updated = Array.from(new Set([addressInput.trim(), ...recentAddresses])).slice(0, 5);
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+      }
 
       if (selectedItems.length) removeSelectedItems();
       else clearCart();
@@ -273,109 +311,182 @@ export default function CheckoutPage() {
     return <EmptyCheckout />;
   }
 
+  // Derive Prime Member ID
+  const primeMid = customer?.telegramUserId
+    ? `PC${customer.telegramUserId.slice(0, 8).toUpperCase()}`
+    : "PC-GUEST";
+
   return (
     <div className="w-full min-h-screen bg-[#f3f4f6] pb-28">
-      {/* Top compact checkout header */}
-      <div className="bg-white border-b border-neutral-200 px-3.5 py-2.5 shadow-2xs">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => (step === 1 ? navigate("/shop/cart") : setStep((step - 1) as Step))}
-              className="p-1 text-neutral-700 hover:text-black rounded-lg hover:bg-neutral-100 transition"
-              aria-label="Back"
+      {/* Top Normalized Checkout Header */}
+      <div className="bg-white border-b border-neutral-200 px-4 py-3 flex items-center justify-between shadow-2xs">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => (step === 1 ? navigate("/shop/cart") : setStep((step - 1) as Step))}
+            className="p-1 -ml-1 text-black hover:text-neutral-700 transition cursor-pointer"
+            aria-label="Back"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1
+              className="text-black font-normal uppercase text-xl leading-tight"
+              style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
             >
-              <ArrowLeft size={18} />
-            </button>
-            <div>
-              <h1 className="text-base font-bold uppercase tracking-tight leading-none" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-                CHECKOUT
-              </h1>
-              <p className="text-[10px] text-neutral-500 mt-0.5">
-                Step {step} of 4 • {STEP_ITEMS[step - 1].label}
-              </p>
-            </div>
-          </div>
-
-          <div className="text-right">
-            <div className="text-[9px] text-neutral-400 uppercase font-semibold">Total Payable</div>
-            <div className="text-sm font-bold text-neutral-950 leading-tight">
-              {formatCurrency(payable)}
-            </div>
+              CHECKOUT
+            </h1>
+            <p className="text-xs text-neutral-500 font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
+              Step {step} of 4 • {STEP_ITEMS[step - 1].label}
+            </p>
           </div>
         </div>
 
-        {/* Compact step indicators */}
-        <div className="mt-2.5 pt-2 border-t border-neutral-100 grid grid-cols-4 gap-1.5">
-          {STEP_ITEMS.map((item) => {
-            const isCurrent = step === item.id;
-            const isPassed = step > item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => goToStep(item.id)}
-                className={`py-1.5 px-1 rounded-lg text-[10px] uppercase font-semibold flex items-center justify-center gap-1 transition ${
-                  isCurrent
-                    ? "bg-neutral-900 text-white shadow-2xs"
-                    : isPassed
-                    ? "bg-neutral-100 text-neutral-800 hover:bg-neutral-200"
-                    : "bg-neutral-50 text-neutral-400"
-                }`}
-              >
-                {isPassed ? <Check size={10} className="stroke-[3]" /> : <span>{item.id}.</span>}
-                <span className="truncate">{item.label}</span>
-              </button>
-            );
-          })}
+        {/* Header Right: Subtotal Amount */}
+        <div className="text-right">
+          <div className="text-[10px] text-neutral-400 uppercase font-semibold font-mono tracking-wider">
+            SUBTOTAL
+          </div>
+          <div className="text-base font-bold text-neutral-950 leading-tight font-mono">
+            {formatCurrency(subtotalNow)}
+          </div>
         </div>
       </div>
 
+      {/* Step Indicators: Oval Chips with Dark Gray Active State */}
+      <div className="bg-white/90 border-b border-neutral-200 px-4 py-2.5 grid grid-cols-4 gap-2">
+        {STEP_ITEMS.map((item) => {
+          const isCurrent = step === item.id;
+          const isPassed = step > item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => goToStep(item.id)}
+              className={`py-1.5 px-2 rounded-full text-[10.5px] uppercase font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                isCurrent
+                  ? "bg-neutral-800 text-white shadow-xs"
+                  : isPassed
+                  ? "bg-neutral-200 text-neutral-800 hover:bg-neutral-300"
+                  : "bg-neutral-100 text-neutral-400 hover:bg-neutral-200/60"
+              }`}
+              style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+            >
+              {isPassed && <Check size={10} className="stroke-[3] shrink-0" />}
+              <span className="truncate">{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Main Form Body */}
-      <div className="p-3 space-y-3">
+      <div className="p-3.5 space-y-3.5 w-full max-w-full mx-auto">
         {step === 1 && (
           <form
             onSubmit={(e) => {
               e.preventDefault();
               goNext();
             }}
-            className="space-y-3"
+            className="space-y-3.5"
           >
-            <Card title="Receiver Information" icon={<User size={15} />}>
-              <Field label="Receiver Full Name" icon={<User size={11} />}>
-                <input
-                  value={receiver}
-                  onChange={(e) => setReceiver(e.target.value)}
-                  className="checkout-input"
-                  placeholder="Full name"
-                  required
-                />
-              </Field>
-              <Field label="Contact Phone Number" icon={<Phone size={11} />}>
-                <input
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  type="tel"
-                  className="checkout-input"
-                  placeholder="09XX XXX XXXX"
-                  required
-                />
-              </Field>
+            {/* Card 1: CUSTOMER INFORMATION (Uneditable, 2 equal-sized fields per row) */}
+            <Card title="CUSTOMER INFORMATION" icon={<User size={15} />}>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1">
+                    TELEGRAM NAME
+                  </span>
+                  <input
+                    readOnly
+                    disabled
+                    value={customer?.telegramDisplayName || "GUEST CUSTOMER"}
+                    className="w-full bg-neutral-100 border border-neutral-200/90 text-neutral-700 rounded-xl px-3 py-2 text-xs font-mono font-medium cursor-not-allowed select-text truncate"
+                  />
+                </div>
+                <div>
+                  <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1">
+                    TELEGRAM HANDLE
+                  </span>
+                  <input
+                    readOnly
+                    disabled
+                    value={customer?.telegramUsername ? `@${customer.telegramUsername}` : "N/A"}
+                    className="w-full bg-neutral-100 border border-neutral-200/90 text-neutral-700 rounded-xl px-3 py-2 text-xs font-mono font-medium cursor-not-allowed select-text truncate"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5 pt-0.5">
+                <div>
+                  <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1">
+                    TELEGRAM UID
+                  </span>
+                  <input
+                    readOnly
+                    disabled
+                    value={customer?.telegramUserId || "GUEST"}
+                    className="w-full bg-neutral-100 border border-neutral-200/90 text-neutral-700 rounded-xl px-3 py-2 text-xs font-mono font-medium cursor-not-allowed select-text truncate"
+                  />
+                </div>
+                <div>
+                  <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1">
+                    PRIME MID
+                  </span>
+                  <input
+                    readOnly
+                    disabled
+                    value={primeMid}
+                    className="w-full bg-neutral-100 border border-neutral-200/90 text-neutral-900 rounded-xl px-3 py-2 text-xs font-mono font-bold cursor-not-allowed select-text truncate"
+                  />
+                </div>
+              </div>
             </Card>
 
-            <Card title="Delivery Address" icon={<MapPin size={15} />}>
+            {/* Card 2: RECEIVER INFORMATION (2 Editable, required fields in one row) */}
+            <Card title="RECEIVER INFORMATION" icon={<User size={15} />}>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[10px] font-semibold text-neutral-700 uppercase tracking-wider block mb-1">
+                    NAME <span className="text-red-500 font-bold">*</span>
+                  </label>
+                  <input
+                    value={receiver}
+                    onChange={(e) => setReceiver(e.target.value.toUpperCase())}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 outline-none focus:border-black font-mono uppercase placeholder:normal-case placeholder:text-neutral-400"
+                    placeholder="JOHN DOE"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-neutral-700 uppercase tracking-wider block mb-1">
+                    CONTACT NO. <span className="text-red-500 font-bold">*</span>
+                  </label>
+                  <input
+                    value={phone}
+                    onChange={(e) => setPhone(formatContactNumber(e.target.value))}
+                    type="tel"
+                    maxLength={13}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 outline-none focus:border-black font-mono placeholder:text-neutral-400"
+                    placeholder="0919 123 1122"
+                    required
+                  />
+                </div>
+              </div>
+            </Card>
+
+            {/* Card 3: DELIVERY ADDRESS */}
+            <Card title="DELIVERY ADDRESS" icon={<MapPin size={15} />}>
               <GeoAddressAutocomplete
                 addressInput={addressInput}
                 onAddressChange={setAddressInput}
                 suggestions={suggestions}
+                recentAddresses={recentAddresses}
+                onSelectRecentAddress={(addr) => selectAddressString(addr)}
                 isLoading={geoLoading}
-                isLocating={isLocating}
                 isOpen={geoOpen}
                 setIsOpen={setGeoOpen}
                 selectedLocation={selectedLocation}
                 onSelectSuggestion={selectSuggestion}
-                onDetectGps={detectCurrentLocation}
-                onDetectIp={detectIpLocation}
                 routeInfo={routeInfo}
                 isCalculatingRoute={isCalculatingRoute}
                 warehouseName={geoConfig?.warehouse.name}
@@ -384,7 +495,7 @@ export default function CheckoutPage() {
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value.slice(0, 160))}
-                className="checkout-input resize-none mt-2 text-xs"
+                className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 outline-none focus:border-black resize-none mt-2 font-normal placeholder:text-neutral-400"
                 rows={2}
                 placeholder="Gate, unit, building landmark, or delivery notes (optional)"
               />
@@ -402,10 +513,10 @@ export default function CheckoutPage() {
               e.preventDefault();
               goNext();
             }}
-            className="space-y-3"
+            className="space-y-3.5"
           >
-            <Card title="Delivery Provider" icon={<Truck size={15} />}>
-              <p className="text-[11px] text-neutral-500 -mt-1">
+            <Card title="DELIVERY PROVIDER" icon={<Truck size={15} />}>
+              <p className="text-[11px] text-neutral-500 -mt-1 font-normal">
                 Select your preferred courier service:
               </p>
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
@@ -462,7 +573,7 @@ export default function CheckoutPage() {
                         setPromoCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 64));
                         setQuote(null);
                       }}
-                      className="checkout-input flex-1 py-1.5 text-xs font-mono uppercase"
+                      className="flex-1 bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-mono uppercase text-neutral-900 outline-none focus:border-black"
                       placeholder="ENTER PROMO CODE"
                       autoCapitalize="characters"
                     />
@@ -472,7 +583,7 @@ export default function CheckoutPage() {
                         if (!promoCode.trim()) toast.error("Enter a promo code first.");
                         else setQuoteError(null);
                       }}
-                      className="px-3 py-1.5 rounded-xl bg-neutral-900 text-white text-xs font-semibold hover:bg-black transition"
+                      className="px-3 py-1.5 rounded-xl bg-neutral-900 text-white text-xs font-semibold hover:bg-black transition cursor-pointer"
                     >
                       APPLY
                     </button>
@@ -504,7 +615,7 @@ export default function CheckoutPage() {
               )}
             </Card>
 
-            <Card title="Delivery Fee Payment" icon={<Truck size={15} />}>
+            <Card title="DELIVERY FEE PAYMENT" icon={<Truck size={15} />}>
               <div className="grid grid-cols-2 gap-2">
                 {(["PAY_AT_CHECKOUT", "PAY_UPON_FULFILLMENT"] as DeliveryPaymentOption[]).map((value) => {
                   const isSelected = deliveryPaymentOption === value;
@@ -513,7 +624,7 @@ export default function CheckoutPage() {
                       key={value}
                       type="button"
                       onClick={() => setDeliveryPaymentOption(value)}
-                      className={`p-2.5 rounded-xl border text-left transition ${
+                      className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
                         isSelected
                           ? "bg-neutral-900 text-white border-black shadow-2xs"
                           : "bg-white border-neutral-200 hover:border-neutral-300"
@@ -542,15 +653,15 @@ export default function CheckoutPage() {
         )}
 
         {step === 3 && (
-          <div className="space-y-3">
-            <Summary title="Receiver & Address" icon={<MapPin size={15} />} onEdit={() => setStep(1)}>
-              <p className="font-bold text-neutral-950">{receiver}</p>
-              <p className="text-neutral-600">{phone}</p>
+          <div className="space-y-3.5">
+            <Summary title="RECEIVER & ADDRESS" icon={<MapPin size={15} />} onEdit={() => setStep(1)}>
+              <p className="font-bold text-neutral-950 uppercase">{receiver}</p>
+              <p className="text-neutral-600 font-mono">{phone}</p>
               <p className="text-neutral-700 leading-snug mt-0.5">{addressInput}</p>
               {notes && <p className="italic text-neutral-500 text-[11px] mt-1">“{notes}”</p>}
             </Summary>
 
-            <Summary title="Delivery Details" icon={<Truck size={15} />} onEdit={() => setStep(2)}>
+            <Summary title="DELIVERY DETAILS" icon={<Truck size={15} />} onEdit={() => setStep(2)}>
               <div className="flex justify-between items-center font-bold text-neutral-950">
                 <span>{quote?.courierName || selectedCourier?.name}</span>
                 <span className="text-emerald-700">
@@ -565,14 +676,14 @@ export default function CheckoutPage() {
               )}
             </Summary>
 
-            <Card title="Order Items & Pricing" icon={<ShoppingBag size={15} />}>
+            <Card title="ORDER ITEMS & PRICING" icon={<ShoppingBag size={15} />}>
               <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                 {checkoutItems.map((item) => (
                   <div key={item.productId} className="flex justify-between text-xs text-neutral-800">
                     <span className="truncate max-w-[70%]">
                       {item.productName} <span className="text-neutral-400">×{item.quantity}</span>
                     </span>
-                    <span className="font-semibold shrink-0">{formatCurrency(item.unitPrice * item.quantity)}</span>
+                    <span className="font-semibold shrink-0 font-mono">{formatCurrency(item.unitPrice * item.quantity)}</span>
                   </div>
                 ))}
               </div>
@@ -589,7 +700,7 @@ export default function CheckoutPage() {
                   <span className="text-sm uppercase tracking-tight" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
                     Final Payable
                   </span>
-                  <span className="text-base text-neutral-950">{formatCurrency(payable)}</span>
+                  <span className="text-base text-neutral-950 font-mono">{formatCurrency(payable)}</span>
                 </div>
               </div>
             </Card>
@@ -602,8 +713,8 @@ export default function CheckoutPage() {
         )}
 
         {step === 4 && (
-          <div className="space-y-3">
-            <Card title="Payment Method" icon={<CreditCard size={15} />}>
+          <div className="space-y-3.5">
+            <Card title="PAYMENT METHOD" icon={<CreditCard size={15} />}>
               <div className="grid grid-cols-2 gap-2">
                 <Pay
                   selected={paymentMethod === "TELEGRAM_PAY"}
@@ -627,7 +738,7 @@ export default function CheckoutPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <span className="text-[9px] text-neutral-500 uppercase block font-semibold">GCASH / MAYA</span>
-                      <span className="font-bold text-neutral-900 text-xs">0919 123 1234</span>
+                      <span className="font-bold text-neutral-900 text-xs font-mono">0919 123 1234</span>
                     </div>
                     <div>
                       <span className="text-[9px] text-neutral-500 uppercase block font-semibold">ACCOUNT NAME</span>
@@ -656,10 +767,10 @@ export default function CheckoutPage() {
               </div>
             </Card>
 
-            <Summary title="Total Due" icon={<ShieldCheck size={15} />} onEdit={() => setStep(3)}>
+            <Summary title="TOTAL DUE" icon={<ShieldCheck size={15} />} onEdit={() => setStep(3)}>
               <div className="flex justify-between items-baseline font-bold text-neutral-950">
                 <span className="text-xs uppercase">Amount to Settle</span>
-                <span className="text-base">{formatCurrency(payable)}</span>
+                <span className="text-base font-mono">{formatCurrency(payable)}</span>
               </div>
             </Summary>
 
@@ -700,7 +811,7 @@ function EmptyCheckout() {
       </p>
       <Link
         to="/shop/cart"
-        className="inline-flex items-center gap-2 bg-neutral-950 text-white px-5 py-2.5 rounded-xl text-xs font-semibold hover:bg-black transition"
+        className="inline-flex items-center gap-2 bg-neutral-950 text-white px-5 py-2.5 rounded-xl text-xs font-semibold hover:bg-black transition cursor-pointer"
       >
         <ArrowLeft size={14} /> Return to Cart
       </Link>
@@ -711,7 +822,10 @@ function EmptyCheckout() {
 function Card({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="bg-white rounded-xl border border-neutral-200/90 p-3.5 shadow-2xs space-y-2.5">
-      <div className="flex items-center gap-1.5 text-xs font-bold uppercase text-neutral-900 pb-1.5 border-b border-neutral-100" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+      <div
+        className="flex items-center gap-1.5 text-xs font-bold uppercase text-neutral-900 pb-1.5 border-b border-neutral-100"
+        style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+      >
         {icon}
         <span>{title}</span>
       </div>
@@ -734,7 +848,10 @@ function Summary({
   return (
     <section className="bg-white rounded-xl border border-neutral-200/90 p-3.5 shadow-2xs text-xs text-neutral-700 relative">
       <div className="flex items-center justify-between pb-1.5 border-b border-neutral-100 mb-2">
-        <div className="flex items-center gap-1.5 text-xs font-bold uppercase text-neutral-900" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+        <div
+          className="flex items-center gap-1.5 text-xs font-bold uppercase text-neutral-900"
+          style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
+        >
           {icon}
           <span>{title}</span>
         </div>
@@ -755,7 +872,7 @@ function Line({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between text-neutral-600">
       <span>{label}</span>
-      <span className="font-semibold text-neutral-900">{value}</span>
+      <span className="font-semibold text-neutral-900 font-mono">{value}</span>
     </div>
   );
 }

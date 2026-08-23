@@ -14,19 +14,12 @@ import {
 } from "@/lib/geoapify.ts";
 import { toast } from "sonner";
 
-export function useAddressAutocomplete(initialAddress: string = "Bonifacio High Street, 5th Avenue, BGC, Taguig, Metro Manila, 1634") {
+export function useAddressAutocomplete(initialAddress: string = "") {
   const [addressInput, setAddressInput] = useState(initialAddress);
-  const [suggestions, setSuggestions] = useState<GeoLocation[]>(PHILIPPINES_LOCATIONS_DATABASE.slice(0, 5));
+  const [suggestions, setSuggestions] = useState<GeoLocation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
-
-  // Initialize selected location with default BGC / initial location
-  const initialMatch =
-    PHILIPPINES_LOCATIONS_DATABASE.find(
-      (l) => l.formatted.toLowerCase() === initialAddress.toLowerCase()
-    ) || PHILIPPINES_LOCATIONS_DATABASE[0];
-
-  const [selectedLocation, setSelectedLocation] = useState<GeoLocation | null>(initialMatch);
+  const [selectedLocation, setSelectedLocation] = useState<GeoLocation | null>(null);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [ipInfo, setIpInfo] = useState<IpLocationInfo | null>(null);
@@ -57,33 +50,30 @@ export function useAddressAutocomplete(initialAddress: string = "Bonifacio High 
     [geoConfig]
   );
 
-  // Load Geo Config and calculate initial route on mount
+  // Load Geo Config on mount
   useEffect(() => {
     getGeoConfig().then((cfg) => {
       setGeoConfig(cfg);
-      if (initialMatch) {
-        updateRoute(initialMatch.lat, initialMatch.lon);
-      }
     });
-  }, [updateRoute]);
+  }, []);
 
-  // Exact 300ms Debounce Implementation for Geoapify Autocomplete
+  // Strict 300ms Debounce: Only fetch suggestions when at least 2 characters are typed
   useEffect(() => {
-    if (!addressInput || addressInput.trim().length === 0) {
-      setSuggestions(PHILIPPINES_LOCATIONS_DATABASE.slice(0, 6));
+    if (!addressInput || addressInput.trim().length < 2) {
+      setSuggestions([]);
       setIsLoading(false);
       return;
     }
 
     // If address matches currently selected location formatted text, don't re-trigger dropdown search
-    if (selectedLocation && selectedLocation.formatted === addressInput) {
+    if (selectedLocation && selectedLocation.formatted.toLowerCase() === addressInput.trim().toLowerCase()) {
       return;
     }
 
     setIsLoading(true);
     const handler = setTimeout(async () => {
       try {
-        const results = await searchAddressAutocomplete(addressInput, {
+        const results = await searchAddressAutocomplete(addressInput.trim(), {
           country: "ph",
           limit: 6,
         });
@@ -96,12 +86,12 @@ export function useAddressAutocomplete(initialAddress: string = "Bonifacio High 
       } finally {
         setIsLoading(false);
       }
-    }, 300); // Strict 300ms debounce
+    }, 300);
 
     return () => clearTimeout(handler);
   }, [addressInput, selectedLocation]);
 
-  // Select a suggestion
+  // Select a suggestion from search results
   const selectSuggestion = useCallback(
     (loc: GeoLocation) => {
       setSelectedLocation(loc);
@@ -109,6 +99,38 @@ export function useAddressAutocomplete(initialAddress: string = "Bonifacio High 
       setSuggestions([]);
       setIsOpen(false);
       updateRoute(loc.lat, loc.lon);
+    },
+    [updateRoute]
+  );
+
+  // Select a recent or custom address string and geocode it
+  const selectAddressString = useCallback(
+    async (addr: string) => {
+      setAddressInput(addr);
+      setSuggestions([]);
+      setIsOpen(false);
+      setIsLoading(true);
+      try {
+        const found = await geocodeAddress(addr);
+        if (found) {
+          setSelectedLocation(found);
+          updateRoute(found.lat, found.lon);
+        } else {
+          // Fallback approximate location
+          const fallbackLoc: GeoLocation = {
+            formatted: addr,
+            lat: 14.5507,
+            lon: 121.0477,
+            source: "fallback",
+          };
+          setSelectedLocation(fallbackLoc);
+          updateRoute(fallbackLoc.lat, fallbackLoc.lon);
+        }
+      } catch (e) {
+        console.warn("Geocoding failed for address:", addr, e);
+      } finally {
+        setIsLoading(false);
+      }
     },
     [updateRoute]
   );
@@ -209,6 +231,7 @@ export function useAddressAutocomplete(initialAddress: string = "Bonifacio High 
     ipInfo,
     geoConfig,
     selectSuggestion,
+    selectAddressString,
     detectCurrentLocation,
     detectIpLocation,
     updateRoute,

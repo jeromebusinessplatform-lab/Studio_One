@@ -25,8 +25,8 @@ export default function CheckoutPage() {
   const { createOrder } = useOrders(customer?.telegramUserId);
   const { couriers, calculateDeliveryCharge } = useCouriers();
   const navigate = useNavigate();
-  const itemsToCheckout = selectedItems.length ? selectedItems : items;
-  const activeSubtotal = selectedItems.length ? selectedSubtotal : subtotal;
+  const itemsToCheckout = useMemo(() => selectedItems.length ? selectedItems : items, [selectedItems, items]);
+  const activeSubtotal = useMemo(() => selectedItems.length ? selectedSubtotal : subtotal, [selectedItems, selectedSubtotal, subtotal]);
   const [step, setStep] = useState<CheckoutStep>(1);
   const [receiverName, setReceiverName] = useState(customer?.telegramDisplayName || "");
   const [phone, setPhone] = useState("");

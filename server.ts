@@ -5,9 +5,8 @@ import dotenv from "dotenv";
 import axios from "axios";
 import FormData from "form-data";
 import crypto from "node:crypto";
-import { cert, getApps, initializeApp, applicationDefault } from "firebase-admin/app";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { installReleaseRoutes } from "./server/releaseRoutes.js";
+import { firestoreService } from "./server/firestoreService.js";
 
 dotenv.config();
 
@@ -54,23 +53,6 @@ function isValidAdminSession(token: string | null): boolean {
 function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!isValidAdminSession(getCookie(req, ADMIN_SESSION_COOKIE))) return res.status(401).json({ error: "Admin authentication required" });
   return next();
-}
-
-let adminDb: ReturnType<typeof getFirestore> | null = null;
-function getAdminDb() {
-  if (adminDb) return adminDb;
-  if (getApps().length === 0) {
-    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-    if (raw?.trim()) {
-      let serviceAccount: Record<string, unknown>;
-      try { serviceAccount = JSON.parse(raw); } catch { throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON"); }
-      initializeApp({ credential: cert(serviceAccount as Parameters<typeof cert>[0]) });
-    } else {
-      initializeApp({ credential: applicationDefault() });
-    }
-  }
-  adminDb = getFirestore(process.env.FIRESTORE_DATABASE_ID || "ai-studio-primecommerce-f59766ab-326b-40a2-bcc8-eae7f46dfe5f");
-  return adminDb;
 }
 
 function cleanChargePayload(body: any) {
@@ -122,8 +104,8 @@ app.post("/api/admin/logout", (_req, res) => {
 // directly to these Firestore collections; every mutation requires the HttpOnly admin session.
 app.get("/api/admin/charges", requireAdmin, async (_req, res) => {
   try {
-    const snapshot = await getAdminDb().collection("charges").get();
-    const charges = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    const rawCharges = await firestoreService.getDocuments("charges");
+    const charges = rawCharges.sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
     return res.json({ charges });
   } catch (error: any) {
     console.error("Admin charges read error:", error);
@@ -134,8 +116,8 @@ app.get("/api/admin/charges", requireAdmin, async (_req, res) => {
 app.post("/api/admin/charges", requireAdmin, async (req, res) => {
   try {
     const data = cleanChargePayload(req.body);
-    const ref = await getAdminDb().collection("charges").add({ ...data, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-    return res.status(201).json({ id: ref.id, ...data });
+    const created = await firestoreService.addDocument("charges", data);
+    return res.status(201).json(created);
   } catch (error: any) {
     console.error("Admin charge create error:", error);
     return res.status(error.message === "Invalid charge data" ? 400 : 500).json({ error: error.message === "Invalid charge data" ? error.message : "Unable to create charge" });
@@ -147,8 +129,8 @@ app.patch("/api/admin/charges/:id", requireAdmin, async (req, res) => {
     const id = req.params.id;
     if (!/^[A-Za-z0-9_-]{1,150}$/.test(id)) return res.status(400).json({ error: "Invalid charge id" });
     const data = cleanChargePayload(req.body);
-    await getAdminDb().collection("charges").doc(id).update({ ...data, updatedAt: FieldValue.serverTimestamp() });
-    return res.json({ id, ...data });
+    const updated = await firestoreService.updateDocument("charges", id, data);
+    return res.json(updated);
   } catch (error: any) {
     console.error("Admin charge update error:", error);
     return res.status(error.message === "Invalid charge data" ? 400 : 500).json({ error: error.message === "Invalid charge data" ? error.message : "Unable to update charge" });
@@ -159,7 +141,7 @@ app.delete("/api/admin/charges/:id", requireAdmin, async (req, res) => {
   try {
     const id = req.params.id;
     if (!/^[A-Za-z0-9_-]{1,150}$/.test(id)) return res.status(400).json({ error: "Invalid charge id" });
-    await getAdminDb().collection("charges").doc(id).delete();
+    await firestoreService.deleteDocument("charges", id);
     return res.json({ success: true });
   } catch (error) {
     console.error("Admin charge delete error:", error);
@@ -169,8 +151,8 @@ app.delete("/api/admin/charges/:id", requireAdmin, async (req, res) => {
 
 app.get("/api/admin/discounts", requireAdmin, async (_req, res) => {
   try {
-    const snapshot = await getAdminDb().collection("discounts").get();
-    const discounts = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    const rawDiscounts = await firestoreService.getDocuments("discounts");
+    const discounts = rawDiscounts.sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
     return res.json({ discounts });
   } catch (error: any) {
     console.error("Admin discounts read error:", error);
@@ -181,10 +163,10 @@ app.get("/api/admin/discounts", requireAdmin, async (_req, res) => {
 app.post("/api/admin/discounts", requireAdmin, async (req, res) => {
   try {
     const data = cleanDiscountPayload(req.body);
-    const existing = await getAdminDb().collection("discounts").where("code", "==", data.code).limit(1).get();
-    if (!existing.empty) return res.status(409).json({ error: "Promo code already exists" });
-    const ref = await getAdminDb().collection("discounts").add({ ...data, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-    return res.status(201).json({ id: ref.id, ...data });
+    const existing = await firestoreService.getDocuments("discounts");
+    if (existing.some((d) => d.code === data.code)) return res.status(409).json({ error: "Promo code already exists" });
+    const created = await firestoreService.addDocument("discounts", data);
+    return res.status(201).json(created);
   } catch (error: any) {
     console.error("Admin discount create error:", error);
     return res.status(error.message === "Invalid discount data" ? 400 : 500).json({ error: error.message === "Invalid discount data" ? error.message : "Unable to create discount" });
@@ -196,10 +178,10 @@ app.patch("/api/admin/discounts/:id", requireAdmin, async (req, res) => {
     const id = req.params.id;
     if (!/^[A-Za-z0-9_-]{1,150}$/.test(id)) return res.status(400).json({ error: "Invalid discount id" });
     const data = cleanDiscountPayload(req.body);
-    const duplicate = await getAdminDb().collection("discounts").where("code", "==", data.code).limit(2).get();
-    if (duplicate.docs.some((d) => d.id !== id)) return res.status(409).json({ error: "Promo code already exists" });
-    await getAdminDb().collection("discounts").doc(id).update({ ...data, updatedAt: FieldValue.serverTimestamp() });
-    return res.json({ id, ...data });
+    const existing = await firestoreService.getDocuments("discounts");
+    if (existing.some((d) => d.id !== id && d.code === data.code)) return res.status(409).json({ error: "Promo code already exists" });
+    const updated = await firestoreService.updateDocument("discounts", id, data);
+    return res.json(updated);
   } catch (error: any) {
     console.error("Admin discount update error:", error);
     return res.status(error.message === "Invalid discount data" ? 400 : 500).json({ error: error.message === "Invalid discount data" ? error.message : "Unable to update discount" });
@@ -210,7 +192,7 @@ app.delete("/api/admin/discounts/:id", requireAdmin, async (req, res) => {
   try {
     const id = req.params.id;
     if (!/^[A-Za-z0-9_-]{1,150}$/.test(id)) return res.status(400).json({ error: "Invalid discount id" });
-    await getAdminDb().collection("discounts").doc(id).delete();
+    await firestoreService.deleteDocument("discounts", id);
     return res.json({ success: true });
   } catch (error) {
     console.error("Admin discount delete error:", error);

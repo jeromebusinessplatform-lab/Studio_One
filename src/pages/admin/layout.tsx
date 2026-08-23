@@ -14,26 +14,26 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-white text-black flex flex-col">
+    <div className="min-h-[100dvh] w-full max-w-full bg-white text-black flex flex-col">
       {!isDashboard && (
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-neutral-200 px-4 sm:px-6 py-2.5 flex items-center justify-between">
+        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-neutral-200 px-3 sm:px-6 py-2 flex items-center justify-between">
           <button
             type="button"
             onClick={() => navigate("/admin")}
-            className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-neutral-600 hover:text-black transition"
+            className="inline-flex items-center gap-1 text-[11px] uppercase tracking-[0.1em] text-neutral-600 hover:text-black transition"
           >
             <ArrowLeft size={14} /> Dashboard
           </button>
           <button
             type="button"
             onClick={handleLogout}
-            className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-neutral-600 hover:text-black transition"
+            className="inline-flex items-center gap-1 text-[11px] uppercase tracking-[0.1em] text-neutral-600 hover:text-black transition"
           >
             <LogOut size={14} /> Logout
           </button>
         </header>
       )}
-      <main className="flex-1 min-h-0 overflow-auto">
+      <main className="flex-1 w-full max-w-full min-h-0 overflow-auto">
         <Outlet />
       </main>
       {isDashboard && (

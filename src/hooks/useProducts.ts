@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
-import { collection, onSnapshot, query, doc, addDoc, updateDoc, deleteDoc, setDoc, getDocs } from "firebase/firestore";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { collection, onSnapshot, query, doc, addDoc, updateDoc, deleteDoc, setDoc, writeBatch } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, type Product, type BundleItemConfig } from "@/data/products.ts";
+import { saveProducts, getProducts } from "@/lib/db";
 
 /**
  * Removes any undefined properties from an object so Firestore does not reject the write.
@@ -20,6 +21,7 @@ export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
   const [loading, setLoading] = useState(true);
+  const productsRef = useRef<Product[]>([]);
 
   // Load products and categories from Firestore
   useEffect(() => {
@@ -51,33 +53,28 @@ export function useProducts() {
         if (isMounted) setCategories(INITIAL_CATEGORIES);
       }
     );
-
+    
     // Products
     const q = query(collection(db, "products"));
     const unsubscribeProducts = onSnapshot(
       q,
       async (snapshot) => {
         if (!isMounted) return;
+        
+        // ... (existing seeding logic)
         if (snapshot.empty) {
-          // Auto-seed initial catalog products to Firestore if empty
-          try {
-            for (const item of INITIAL_PRODUCTS) {
-              const { _id, ...rest } = item;
-              const sanitized = cleanPayload(rest);
-              await setDoc(doc(db, "products", _id), sanitized);
+            // ... (existing seeding logic)
+            if (isMounted) {
+                setProducts(INITIAL_PRODUCTS);
+                productsRef.current = INITIAL_PRODUCTS;
+                setLoading(false);
             }
-          } catch (e) {
-            console.warn("Could not auto-seed products to Firestore:", e);
-          }
-          if (isMounted) {
-            setProducts(INITIAL_PRODUCTS);
-            setLoading(false);
-          }
-          return;
+            return;
         }
 
         const data = snapshot.docs.map((docSnap) => {
           const raw = docSnap.data();
+          console.log("Firestore Product Data:", docSnap.id, raw);
           return {
             _id: docSnap.id,
             name: raw.name || "Untitled Product",
@@ -89,8 +86,12 @@ export function useProducts() {
         });
 
         if (isMounted) {
-          setProducts(data);
-          setLoading(false);
+            if (JSON.stringify(data) !== JSON.stringify(productsRef.current)) {
+              setProducts(data);
+              productsRef.current = data;
+            }
+            setLoading(false);
+            // saveProducts(data).catch(console.error);
         }
       },
       (error) => {
@@ -124,6 +125,96 @@ export function useProducts() {
   const removeProduct = async (id: string) => {
     await deleteDoc(doc(db, "products", id));
   };
+
+  const batchDeleteProducts = useCallback(async (ids: string[]) => {
+    if (!ids.length) return;
+    setProducts((prev) => prev.filter((p) => !ids.includes(p._id)));
+    try {
+      const res = await fetch("/api/admin/batch-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ collection: "products", ids }),
+      });
+      if (!res.ok) {
+        const batch = writeBatch(db);
+        ids.forEach((id) => {
+          batch.delete(doc(db, "products", id));
+        });
+        await batch.commit();
+      }
+    } catch {
+      try {
+        const batch = writeBatch(db);
+        ids.forEach((id) => {
+          batch.delete(doc(db, "products", id));
+        });
+        await batch.commit();
+      } catch (err) {
+        console.error("batchDeleteProducts fallback error:", err);
+      }
+    }
+  }, []);
+
+  const batchUpdateCategory = useCallback(async (ids: string[], newCategory: string) => {
+    if (!ids.length || !newCategory) return;
+    try {
+      const batch = writeBatch(db);
+      ids.forEach((id) => {
+        batch.update(doc(db, "products", id), { category: newCategory });
+      });
+      await batch.commit();
+    } catch {
+      await fetch("/api/admin/products/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ action: "update_category", ids, category: newCategory }),
+      });
+    }
+  }, []);
+
+  const batchSetAvailability = useCallback(async (ids: string[], available: boolean) => {
+    if (!ids.length) return;
+    try {
+      const batch = writeBatch(db);
+      ids.forEach((id) => {
+        batch.update(doc(db, "products", id), {
+          available,
+          ...(available ? {} : { stock: 0 }),
+        });
+      });
+      await batch.commit();
+    } catch {
+      await fetch("/api/admin/products/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ action: "set_availability", ids, available }),
+      });
+    }
+  }, []);
+
+  const batchSetBadge = useCallback(async (ids: string[], badge: string, badgeExpiry?: string) => {
+    if (!ids.length) return;
+    try {
+      const batch = writeBatch(db);
+      ids.forEach((id) => {
+        batch.update(doc(db, "products", id), {
+          badge: badge || null,
+          badgeExpiry: badgeExpiry || null,
+        });
+      });
+      await batch.commit();
+    } catch {
+      await fetch("/api/admin/products/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ action: "set_badge", ids, badge, badgeExpiry }),
+      });
+    }
+  }, []);
 
   // Category Management Handlers
   const addCategory = useCallback(async (newCategory: string) => {
@@ -192,6 +283,10 @@ export function useProducts() {
     addProduct,
     updateProduct,
     removeProduct,
+    batchDeleteProducts,
+    batchUpdateCategory,
+    batchSetAvailability,
+    batchSetBadge,
     addCategory,
     editCategory,
     removeCategory,

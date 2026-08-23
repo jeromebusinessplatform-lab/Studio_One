@@ -11,7 +11,7 @@ import {
   AreaChart,
 } from "recharts";
 import { TrendingUp, DollarSign, ShoppingBag, Calendar, ArrowUpRight, Award, BarChart3 } from "lucide-react";
-import { useOrders } from "@/hooks/useOrders.ts";
+import { useOrders, type CustomerOrder } from "@/hooks/useOrders.ts";
 import { formatCurrency } from "@/lib/utils.ts";
 
 interface DailySalesData {
@@ -22,8 +22,13 @@ interface DailySalesData {
   avgOrderValue: number;
 }
 
-export function SalesPerformanceChart() {
-  const { allOrders } = useOrders();
+interface SalesPerformanceChartProps {
+  orders?: CustomerOrder[];
+}
+
+export function SalesPerformanceChart({ orders: passedOrders }: SalesPerformanceChartProps = {}) {
+  const { allOrders: hookOrders } = useOrders(passedOrders ? "SKIP_IF_PASSED" : undefined);
+  const allOrders = passedOrders || hookOrders;
   const [timeRange, setTimeRange] = useState<"30" | "14" | "7">("30");
 
   const salesData = useMemo<DailySalesData[]>(() => {

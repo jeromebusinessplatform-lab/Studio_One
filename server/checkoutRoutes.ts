@@ -1,11 +1,9 @@
 import crypto from "node:crypto";
 import type { Application, Request, Response } from "express";
-import { cert, getApps, initializeApp, applicationDefault } from "firebase-admin/app";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { firestoreService } from "./firestoreService.js";
 
 const TG_COOKIE = "prime_telegram_session";
 const TG_TTL_MS = 24 * 60 * 60 * 1000;
-const DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || "ai-studio-primecommerce-f59766ab-326b-40a2-bcc8-eae7f46dfe5f";
 const TAX_RATE = 0.05;
 const FALLBACK_COURIERS: Record<string, any> = {
   "courier-1": { name: "PRIME In-House Express", baseFare: 60, baseDistanceKm: 4, perKmCharge: 12, platformFeeEnabled: false, platformFee: 0, nightDifferentialEnabled: true, nightDifferentialFee: 30, surchargeEnabled: false, surchargeFee: 0, isAvailable: true },
@@ -16,15 +14,6 @@ const FALLBACK_COURIERS: Record<string, any> = {
 type PaymentMethod = "TELEGRAM_PAY" | "DIRECT_TRANSFER";
 type DeliveryPaymentOption = "PAY_AT_CHECKOUT" | "PAY_UPON_FULFILLMENT";
 type AppliedPromo = { code: string; freeDelivery: boolean };
-
-function db() {
-  if (!getApps().length) {
-    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-    if (raw?.trim()) initializeApp({ credential: cert(JSON.parse(raw)) });
-    else initializeApp({ credential: applicationDefault() });
-  }
-  return getFirestore(DATABASE_ID);
-}
 
 function cookie(req: Request, name: string) {
   const value = req.headers.cookie || "";
@@ -81,13 +70,12 @@ function validateItems(input: any) {
   });
 }
 
-async function resolvePromo(firestore: FirebaseFirestore.Firestore, telegramId: string, rawCode: unknown, subtotal: number): Promise<AppliedPromo | null> {
+async function resolvePromo(telegramId: string, rawCode: unknown, subtotal: number): Promise<AppliedPromo | null> {
   const code = String(rawCode || "").trim().toUpperCase();
   if (!code) return null;
   if (code.length < 3 || code.length > 64 || !/^[A-Z0-9_-]+$/.test(code)) throw new Error("Invalid promo code");
-  const snap = await firestore.collection("promos").doc(code).get();
-  if (!snap.exists) throw new Error("Promo code is invalid or unavailable");
-  const promo: any = snap.data() || {};
+  const promo = await firestoreService.getDocument("promos", code);
+  if (!promo) throw new Error("Promo code is invalid or unavailable");
   if (promo.active !== true) throw new Error("Promo code is inactive");
   if (promo.freeDelivery !== true) throw new Error("Promo code is not a free-delivery promotion");
   const eligible = Array.isArray(promo.eligibleTelegramUserIds) ? promo.eligibleTelegramUserIds.map(String) : [];
@@ -104,16 +92,12 @@ async function resolvePromo(firestore: FirebaseFirestore.Firestore, telegramId: 
 
 async function buildQuote(input: any, telegramId: string) {
   const items = validateItems(input.items);
-  const firestore = db();
-  const productRefs = items.map((item) => firestore.collection("products").doc(item.productId));
-  const snapshots = await Promise.all(productRefs.map((ref) => ref.get()));
   const normalizedItems: any[] = [];
   let subtotal = 0;
-  for (let i = 0; i < snapshots.length; i += 1) {
-    const snap = snapshots[i];
+  for (let i = 0; i < items.length; i += 1) {
     const item = items[i];
-    if (!snap.exists) throw new Error(`Product ${item.productId} is no longer available`);
-    const product: any = snap.data() || {};
+    const product = await firestoreService.getDocument("products", item.productId);
+    if (!product) throw new Error(`Product ${item.productId} is no longer available`);
     const stock = number(product.stock);
     if (product.available === false || stock < item.quantity) throw new Error(`${String(product.name || item.productId)} is out of stock`);
     const unitPrice = number(product.bundleCalculatedPrice ?? product.salePrice ?? product.price, NaN);
@@ -127,19 +111,17 @@ async function buildQuote(input: any, telegramId: string) {
   const distanceKm = number(input.distanceKm, NaN);
   if (!courierId) throw new Error("Select a delivery provider");
   if (!Number.isFinite(distanceKm) || distanceKm < 0 || distanceKm > 500) throw new Error("Invalid delivery distance");
-  const courierSnap = await firestore.collection("couriers").doc(courierId).get();
-  const courier: any = courierSnap.exists ? courierSnap.data() || {} : FALLBACK_COURIERS[courierId];
+  const courier = (await firestoreService.getDocument("couriers", courierId)) || FALLBACK_COURIERS[courierId];
   if (!courier) throw new Error("Selected delivery provider is unavailable");
   if (courier.isAvailable !== true) throw new Error("Selected delivery provider is currently unavailable");
 
-  const promo = await resolvePromo(firestore, telegramId, input.promoCode, subtotal);
+  const promo = await resolvePromo(telegramId, input.promoCode, subtotal);
   const deliveryCharge = promo?.freeDelivery ? 0 : calculateCourierCharge(courier, distanceKm);
   const deliveryPaymentOption: DeliveryPaymentOption = input.deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? "PAY_UPON_FULFILLMENT" : "PAY_AT_CHECKOUT";
   const deliveryDueNow = deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? 0 : deliveryCharge;
 
-  const chargesSnap = await firestore.collection("charges").get();
-  const charges = roundMoney(chargesSnap.docs.reduce((sum, doc) => {
-    const charge: any = doc.data();
+  const chargesList = await firestoreService.getDocuments("charges");
+  const charges = roundMoney(chargesList.reduce((sum, charge) => {
     if (charge.active !== true) return sum;
     const amount = number(charge.amount);
     return sum + (charge.type === "percent" ? subtotal * amount / 100 : amount);
@@ -147,7 +129,7 @@ async function buildQuote(input: any, telegramId: string) {
   const tax = roundMoney((subtotal + charges) * TAX_RATE);
   const total = roundMoney(subtotal + charges + tax + deliveryDueNow);
   const fulfillmentTotal = roundMoney(subtotal + charges + tax + deliveryCharge);
-  return { items, normalizedItems, subtotal, charges, tax, deliveryCharge, deliveryDueNow, fulfillmentTotal, total, courier: { id: courierSnap.exists ? courierSnap.id : courierId, name: String(courier.name || "Delivery Provider") }, distanceKm, deliveryPaymentOption, promo };
+  return { items, normalizedItems, subtotal, charges, tax, deliveryCharge, deliveryDueNow, fulfillmentTotal, total, courier: { id: courier.id || courierId, name: String(courier.name || "Delivery Provider") }, distanceKm, deliveryPaymentOption, promo };
 }
 
 function setTelegramSession(res: Response, userId: string) {
@@ -186,71 +168,78 @@ export function installCheckoutRoutes(app: Application) {
       const quote = await buildQuote({ ...input, deliveryPaymentOption }, tg);
       if (paymentMethod === "DIRECT_TRANSFER" && !input.receiptUrl) throw new Error("Payment proof is required for direct transfer");
 
-      const firestore = db();
-      const customerRef = firestore.collection("customers").doc(tg);
-      const orderRef = firestore.collection("orders").doc();
-      const now = FieldValue.serverTimestamp();
+      const now = Date.now();
       const orderNumber = `${new Date().toISOString().slice(0, 10).replace(/-/g, "")}${Date.now().toString().slice(-8)}${Math.floor(100 + Math.random() * 900)}`;
 
-      const result = await firestore.runTransaction(async (tx) => {
-        for (const item of quote.normalizedItems) {
-          const productRef = firestore.collection("products").doc(item.productId);
-          const productSnap = await tx.get(productRef);
-          if (!productSnap.exists) throw new Error(`${item.productName} is no longer available`);
-          const product: any = productSnap.data() || {};
-          const currentStock = number(product.stock);
-          if (product.available === false || currentStock < item.quantity) throw new Error(`${item.productName} does not have enough stock`);
-          const authoritativeUnitPrice = number(product.bundleCalculatedPrice ?? product.salePrice ?? product.price, NaN);
-          if (!Number.isFinite(authoritativeUnitPrice) || authoritativeUnitPrice < 0 || roundMoney(authoritativeUnitPrice) !== roundMoney(item.unitPrice)) throw new Error(`Pricing changed for ${item.productName}. Please review your cart again.`);
-          tx.update(productRef, { stock: currentStock - item.quantity, updatedAt: now });
-        }
-        tx.set(customerRef, { id: tg, telegramUserId: tg, telegramDisplayName: String(input.telegramDisplayName || receiverName).slice(0, 120), telegramUsername: input.telegramUsername ? String(input.telegramUsername).slice(0, 64) : null, primeMemberId: `PC${tg.slice(0, 8).toUpperCase()}`, vipTier: "Bronze", updatedAt: now }, { merge: true });
-        const estimatedWaitingMinutes = Math.max(15, Math.ceil(number(input.estimatedWaitingMinutes, 15)));
-        const order = {
-          telegramUserId: tg,
-          telegramDisplayName: String(input.telegramDisplayName || receiverName).slice(0, 120),
-          telegramUsername: input.telegramUsername ? String(input.telegramUsername).slice(0, 64) : null,
-          orderNumber,
-          items: quote.normalizedItems.map(({ stock, ...item }) => item),
-          subtotal: quote.subtotal,
-          discount: 0,
-          charges: quote.charges,
-          tax: quote.tax,
-          deliveryFee: quote.deliveryCharge,
-          deliveryDueNow: quote.deliveryDueNow,
-          total: quote.total,
-          fulfillmentTotal: quote.fulfillmentTotal,
-          receiverName,
-          contactNumber,
-          deliveryAddress,
-          courierName: quote.courier.name,
-          deliveryProviderId: quote.courier.id,
-          deliveryCharge: quote.deliveryCharge,
-          deliveryPaymentMethod: deliveryPaymentOption,
-          deliveryPaymentOption,
-          paymentMethodName,
-          paymentStatus: "PENDING",
-          orderStatus: "REVIEW",
-          queuePosition: 0,
-          estimatedWaitingMinutes,
-          estimatedDispatchTime: input.estimatedDispatchTime ? String(input.estimatedDispatchTime).slice(0, 64) : "CALCULATING",
-          adminNotes: input.adminNotes ? String(input.adminNotes).slice(0, 160) : null,
-          receiptUrl: input.receiptUrl ? String(input.receiptUrl).slice(0, 8_000_000) : null,
-          receiptOcrData: input.receiptOcrData || null,
-          distanceKm: quote.distanceKm,
-          promoCode: quote.promo?.code || null,
-          freeDeliveryPromo: Boolean(quote.promo?.freeDelivery),
-          createdAt: now,
+      // Update product stocks
+      for (const item of quote.normalizedItems) {
+        const product = (await firestoreService.getDocument("products", item.productId)) || {};
+        const currentStock = number(product.stock);
+        if (product.available === false || currentStock < item.quantity) throw new Error(`${item.productName} does not have enough stock`);
+        await firestoreService.updateDocument("products", item.productId, {
+          stock: Math.max(0, currentStock - item.quantity),
           updatedAt: now,
-        };
-        tx.set(orderRef, order);
-        return { ...order, id: orderRef.id };
-      });
+        });
+      }
+
+      await firestoreService.setDocument("customers", tg, {
+        id: tg,
+        telegramUserId: tg,
+        telegramDisplayName: String(input.telegramDisplayName || receiverName).slice(0, 120),
+        telegramUsername: input.telegramUsername ? String(input.telegramUsername).slice(0, 64) : null,
+        primeMemberId: `PC${tg.slice(0, 8).toUpperCase()}`,
+        lastDeliveryAddress: deliveryAddress,
+        vipTier: "Bronze",
+        updatedAt: now,
+      }, true);
+
+      const estimatedWaitingMinutes = Math.max(15, Math.ceil(number(input.estimatedWaitingMinutes, 15)));
+      const order = {
+        telegramUserId: tg,
+        telegramDisplayName: String(input.telegramDisplayName || receiverName).slice(0, 120),
+        telegramUsername: input.telegramUsername ? String(input.telegramUsername).slice(0, 64) : null,
+        primeMemberId: `PC${tg.slice(0, 8).toUpperCase()}`,
+        orderNumber,
+        items: quote.normalizedItems.map(({ stock, ...item }) => item),
+        subtotal: quote.subtotal,
+        discount: 0,
+        charges: quote.charges,
+        tax: quote.tax,
+        deliveryFee: quote.deliveryCharge,
+        deliveryDueNow: quote.deliveryDueNow,
+        total: quote.total,
+        fulfillmentTotal: quote.fulfillmentTotal,
+        receiverName,
+        contactNumber,
+        deliveryAddress,
+        courierName: quote.courier.name,
+        deliveryProviderId: quote.courier.id,
+        deliveryCharge: quote.deliveryCharge,
+        deliveryPaymentMethod: deliveryPaymentOption,
+        deliveryPaymentOption,
+        paymentMethodName,
+        paymentStatus: "PENDING",
+        orderStatus: "REVIEW",
+        queuePosition: 0,
+        estimatedWaitingMinutes,
+        estimatedDispatchTime: input.estimatedDispatchTime ? String(input.estimatedDispatchTime).slice(0, 64) : "CALCULATING",
+        adminNotes: input.adminNotes ? String(input.adminNotes).slice(0, 160) : null,
+        receiptUrl: input.receiptUrl ? String(input.receiptUrl).slice(0, 8_000_000) : null,
+        receiptOcrData: input.receiptOcrData || null,
+        distanceKm: quote.distanceKm,
+        promoCode: quote.promo?.code || null,
+        freeDeliveryPromo: Boolean(quote.promo?.freeDelivery),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const createdOrder = await firestoreService.addDocument("orders", order);
       setTelegramSession(res, tg);
-      return res.status(201).json({ order: result });
+      return res.status(201).json({ order: createdOrder });
     } catch (error: any) {
       console.error("Hardened checkout order error:", error);
       return res.status(400).json({ error: error?.message || "Unable to create order" });
     }
   });
 }
+

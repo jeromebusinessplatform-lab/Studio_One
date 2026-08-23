@@ -63,12 +63,114 @@ export function useCustomers() {
 
   const updateCustomerVip = useCallback(async (id: string, vipTier: VipTier) => {
     setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, vipTier } : c)));
+    try {
+      const res = await fetch(`/api/customers/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vipTier }),
+      });
+      if (!res.ok) throw new Error("Failed to update VIP tier on server");
+    } catch (err) {
+      console.error("updateCustomerVip error:", err);
+      throw err;
+    }
   }, []);
 
   const updateCustomerPoints = useCallback(async (id: string, pointsBalance: number) => {
     setCustomers((prev) =>
       prev.map((c) => (c.id === id ? { ...c, points: pointsBalance, pointsBalance } : c))
     );
+    try {
+      const res = await fetch(`/api/customers/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pointsBalance, points: pointsBalance }),
+      });
+      if (!res.ok) throw new Error("Failed to update points on server");
+    } catch (err) {
+      console.error("updateCustomerPoints error:", err);
+      throw err;
+    }
+  }, []);
+
+  const deleteCustomer = useCallback(async (id: string) => {
+    setCustomers((prev) => prev.filter((c) => c.id !== id));
+    try {
+      const res = await fetch(`/api/customers/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (!res.ok) throw new Error("Failed to delete customer on server");
+    } catch (err) {
+      console.error("deleteCustomer error:", err);
+      throw err;
+    }
+  }, []);
+
+  const batchUpdateVip = useCallback(async (ids: string[], vipTier: VipTier) => {
+    if (!ids.length) return;
+    setCustomers((prev) => prev.map((c) => (ids.includes(c.id) ? { ...c, vipTier } : c)));
+    try {
+      const res = await fetch("/api/admin/customers/batch", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_vip", ids, vipTier }),
+      });
+      if (!res.ok) throw new Error("Failed to batch update VIP tiers");
+    } catch (err) {
+      console.error("batchUpdateVip error:", err);
+      throw err;
+    }
+  }, []);
+
+  const batchAdjustPoints = useCallback(async (ids: string[], pointsDelta: number) => {
+    if (!ids.length) return;
+    setCustomers((prev) =>
+      prev.map((c) => {
+        if (!ids.includes(c.id)) return c;
+        const next = Math.max(0, (c.pointsBalance || c.points || 0) + pointsDelta);
+        return { ...c, points: next, pointsBalance: next };
+      })
+    );
+    try {
+      const res = await fetch("/api/admin/customers/batch", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "adjust_points", ids, pointsDelta }),
+      });
+      if (!res.ok) throw new Error("Failed to batch adjust customer points");
+    } catch (err) {
+      console.error("batchAdjustPoints error:", err);
+      throw err;
+    }
+  }, []);
+
+  const batchDeleteCustomers = useCallback(async (ids: string[]) => {
+    if (!ids.length) return;
+    setCustomers((prev) => prev.filter((c) => !ids.includes(c.id)));
+    try {
+      const res = await fetch("/api/admin/batch-delete", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ collection: "customers", ids }),
+      });
+      if (!res.ok) {
+        await fetch("/api/admin/customers/batch", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "delete", ids }),
+        });
+      }
+    } catch (err) {
+      console.error("batchDeleteCustomers error:", err);
+      throw err;
+    }
   }, []);
 
   return {
@@ -77,5 +179,9 @@ export function useCustomers() {
     refresh: load,
     updateCustomerVip,
     updateCustomerPoints,
+    deleteCustomer,
+    batchUpdateVip,
+    batchAdjustPoints,
+    batchDeleteCustomers,
   };
 }

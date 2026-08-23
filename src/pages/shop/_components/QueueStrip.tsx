@@ -52,7 +52,7 @@ export default function QueueStrip() {
 
   return (
     <div className="bg-white w-full overflow-hidden border-b border-neutral-100 shadow-2xs">
-      <div className="flex items-stretch max-w-lg mx-auto">
+      <div className="flex items-stretch w-full max-w-full mx-auto">
         {/* Column 1: ON QUEUE */}
         <div className="flex-1 py-0.5 px-0.5 text-center bg-white flex flex-col justify-center items-center min-w-0 relative h-8">
           <div

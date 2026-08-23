@@ -106,9 +106,9 @@ export default function AdminDiscountsPage() {
   };
 
   return (
-    <section className="p-3 sm:p-5 max-w-2xl mx-auto space-y-4 bg-white text-black min-h-screen font-condensed">
+    <section className="p-3 sm:p-4 w-full max-w-full space-y-3 bg-white text-black min-h-screen font-condensed">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
+      <div className="flex items-center justify-between border-b border-neutral-200 pb-2.5">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -118,10 +118,10 @@ export default function AdminDiscountsPage() {
             <ArrowLeft size={18} />
           </button>
           <div>
-            <h1 className="text-xl font-bold uppercase tracking-tight">
+            <h1 className="text-lg sm:text-xl font-bold uppercase tracking-tight">
               DISCOUNTS & PROMOTIONAL CODES
             </h1>
-            <p className="text-xs text-neutral-500 font-sans">
+            <p className="text-[11px] text-neutral-500 font-sans">
               Server-authoritative checkout coupon rules and minimum cart thresholds
             </p>
           </div>
@@ -129,15 +129,15 @@ export default function AdminDiscountsPage() {
       </div>
 
       {/* Preset Quick Fill */}
-      <div className="space-y-1.5">
-        <span className="text-[11px] uppercase text-neutral-500 font-bold">Quick Templates:</span>
+      <div className="space-y-1">
+        <span className="text-[10px] uppercase text-neutral-500 font-bold">Quick Templates:</span>
         <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
           {PROMO_PRESETS.map((p, i) => (
             <button
               key={i}
               type="button"
               onClick={() => applyPreset(p)}
-              className="px-2.5 py-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-lg whitespace-nowrap"
+              className="px-2 py-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-lg whitespace-nowrap text-[11px] font-sans"
             >
               + {p.code} ({p.type === "percent" ? `${p.value}% off` : `₱${p.value} off`}, Min ₱{p.minSubtotal})
             </button>
@@ -146,8 +146,8 @@ export default function AdminDiscountsPage() {
       </div>
 
       {/* Add Discount Form */}
-      <div className="bg-neutral-50 border border-neutral-300 rounded-xl p-3 space-y-2">
-        <div className="text-xs font-bold uppercase text-neutral-700">Create New Promo Code</div>
+      <div className="bg-neutral-50 border border-neutral-300 rounded-xl p-2.5 space-y-2">
+        <div className="text-[11px] font-bold uppercase text-neutral-700">Create New Promo Code</div>
         <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
           <input
             className="sm:col-span-2 border border-neutral-300 bg-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-black font-mono uppercase font-bold"
@@ -174,7 +174,7 @@ export default function AdminDiscountsPage() {
             </select>
           </div>
           <input
-            className="border border-neutral-300 bg-white rounded-lg px-2 py-1.5 text-xs outline-none focus:border-black font-mono"
+            className="border border-neutral-300 bg-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-black font-mono"
             type="number"
             min="0"
             placeholder="Min ₱ Cart"
@@ -192,34 +192,43 @@ export default function AdminDiscountsPage() {
         </div>
       </div>
 
-      {/* Discounts List */}
+      {/* Discounts Stacked Cards */}
       <div className="space-y-2">
-        <div className="text-xs font-bold uppercase text-neutral-700">Active Promo Rules ({items.length})</div>
+        <div className="text-[11px] font-bold uppercase text-neutral-700">Active Promo Rules ({items.length})</div>
         {items.length === 0 ? (
           <div className="text-center py-8 text-xs text-neutral-400 font-sans">No discount rules configured yet.</div>
         ) : (
           items.map((d) => (
             <div
               key={d.id}
-              className="bg-white border border-neutral-200 rounded-xl p-3 flex items-center justify-between gap-3 shadow-2xs"
+              className="bg-white border border-neutral-200 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-2xs"
             >
               <div className="flex-1 min-w-0">
-                <div className="font-mono font-bold text-sm text-neutral-900 truncate">{d.code}</div>
-                <div className="text-xs text-neutral-500 font-sans mt-0.5">
-                  <span className="font-mono font-bold text-black">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold text-xs sm:text-sm text-neutral-900 uppercase tracking-wide">
+                    {d.code}
+                  </span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
+                      d.type === "percent" ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
+                    }`}
+                  >
                     {d.type === "percent" ? `${d.value}% OFF` : `₱${d.value.toLocaleString()} OFF`}
-                  </span>{" "}
-                  • Min Spend: ₱{d.minSubtotal.toLocaleString()} •{" "}
+                  </span>
+                </div>
+                <div className="text-[11px] text-neutral-500 font-sans mt-0.5 flex items-center gap-2">
+                  <span>Min Spend: <strong className="font-mono text-black">₱{d.minSubtotal.toLocaleString()}</strong></span>
+                  <span>•</span>
                   <span className={d.active ? "text-emerald-700 font-bold" : "text-neutral-400"}>
                     {d.active ? "Active" : "Disabled"}
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => void toggle(d)}
-                  className={`text-xs px-2.5 py-1 rounded-lg uppercase border font-bold ${
+                  className={`text-[11px] px-2.5 py-1 rounded-lg uppercase border font-bold ${
                     d.active
                       ? "bg-neutral-100 text-neutral-700 border-neutral-300"
                       : "bg-emerald-600 text-white border-emerald-600"
@@ -230,9 +239,10 @@ export default function AdminDiscountsPage() {
                 <button
                   type="button"
                   onClick={() => void remove(d)}
-                  className="p-1 text-neutral-400 hover:text-red-600"
+                  className="p-1 text-neutral-400 hover:text-red-600 cursor-pointer"
+                  title="Delete discount"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={15} />
                 </button>
               </div>
             </div>

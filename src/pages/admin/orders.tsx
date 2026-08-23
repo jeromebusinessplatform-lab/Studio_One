@@ -23,8 +23,10 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowLeft,
+  Clock,
 } from "lucide-react";
 import { useOrders, type CustomerOrder, type OrderStatus } from "@/hooks/useOrders.ts";
+import { AdminOverlayLoader } from "@/components/admin/AdminOverlayLoader.tsx";
 import { ReceiptOcrScanner } from "@/components/ReceiptOcrScanner.tsx";
 import { analyzeReceiptImage } from "@/lib/ocr.ts";
 import type { ReceiptOcrResult } from "@/types/ocr.ts";
@@ -68,15 +70,33 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
 
 export default function AdminOrdersPage() {
   const navigate = useNavigate();
-  const { allOrders: orders, updateOrderStatus, updateOrderOcr, updateOrderPaymentStatus, deleteOrder, loading } = useOrders();
+  const {
+    allOrders: orders,
+    updateOrderStatus,
+    updateOrderOcr,
+    updateOrderPaymentStatus,
+    deleteOrder,
+    loading,
+    syncOrders,
+    isSyncing,
+    lastSyncedAt,
+  } = useOrders();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [selectedOrder, setSelectedOrder] = useState<CustomerOrder | null>(null);
   const [isScanningOcr, setIsScanningOcr] = useState(false);
   const [copiedRef, setCopiedRef] = useState(false);
   const [showSalesAnalytics, setShowSalesAnalytics] = useState(true);
+  const [overlayLoading, setOverlayLoading] = useState<{
+    isVisible: boolean;
+    label: string;
+    sublabel?: string;
+  }>({
+    isVisible: false,
+    label: "",
+  });
 
-  // ... (existing useMemo for filteredOrders) ...
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
       const matchSearch =
@@ -90,9 +110,21 @@ export default function AdminOrdersPage() {
     });
   }, [orders, search, statusFilter]);
 
-
-
-
+  const handleManualSync = async () => {
+    setOverlayLoading({
+      isVisible: true,
+      label: "Syncing Orders with Firestore...",
+      sublabel: "Fetching real-time order entries and payment states",
+    });
+    try {
+      const synced = await syncOrders();
+      toast.success(`Successfully synced ${synced.length} orders from Firestore`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to sync orders with database");
+    } finally {
+      setOverlayLoading({ isVisible: false, label: "" });
+    }
+  };
 
   const handleUpdateStatus = (orderId: string, newStatus: OrderStatus) => {
     updateOrderStatus(orderId, newStatus);
@@ -114,6 +146,11 @@ export default function AdminOrdersPage() {
 
   const handleScanOrderReceipt = async (order: CustomerOrder, receiptUrl: string) => {
     setIsScanningOcr(true);
+    setOverlayLoading({
+      isVisible: true,
+      label: "Extracting Receipt OCR...",
+      sublabel: "Analyzing payment image with Gemini AI Vision",
+    });
     try {
       const result = await analyzeReceiptImage(receiptUrl, {
         expectedAmount: order.total,
@@ -128,6 +165,7 @@ export default function AdminOrdersPage() {
       toast.error(err.message || "Failed to scan receipt with Gemini OCR");
     } finally {
       setIsScanningOcr(false);
+      setOverlayLoading({ isVisible: false, label: "" });
     }
   };
 
@@ -154,51 +192,60 @@ export default function AdminOrdersPage() {
   };
 
   return (
-    <div className="p-3 sm:p-5 space-y-4 bg-white text-black min-h-screen">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-neutral-200 pb-3">
+    <div className="p-3 sm:p-4 w-full max-w-full space-y-3 bg-white text-black min-h-screen">
+      <AdminOverlayLoader
+        isVisible={overlayLoading.isVisible || isSyncing}
+        label={overlayLoading.label || "Syncing Orders..."}
+        sublabel={overlayLoading.sublabel || "Fetching live data from Firestore"}
+      />
+
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 border-b border-neutral-200 pb-2.5">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => navigate("/admin")}
-            className="p-1 text-neutral-500 hover:text-black rounded"
+            className="p-1 text-neutral-500 hover:text-black rounded cursor-pointer"
           >
             <ArrowLeft size={18} />
           </button>
           <div>
             <h1
-              className="text-black text-xl font-bold uppercase tracking-tight"
+              className="text-black text-lg sm:text-xl font-bold uppercase tracking-tight"
               style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
             >
               ORDERS & DISPATCH FULFILLMENT
             </h1>
-            <p className="text-neutral-500 text-xs font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-              Real-time customer orders, payment approvals, and courier dispatches.
+            <p className="text-neutral-500 text-[11px] font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
+              Real-time customer orders, payment approvals, and courier dispatches
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={() => setShowSalesAnalytics((prev) => !prev)}
-            className="flex items-center gap-1.5 bg-black hover:bg-neutral-800 text-white text-xs px-3 py-2 rounded-xl transition cursor-pointer font-normal shadow-2xs"
+            className="flex items-center gap-1 bg-black hover:bg-neutral-800 text-white text-xs px-2.5 py-1.5 rounded-lg transition cursor-pointer font-normal shadow-2xs"
             style={{ fontFamily: "'Ubuntu', sans-serif" }}
           >
-            <TrendingUp size={13} />
-            <span>{showSalesAnalytics ? "Hide Sales Chart" : "Show 30-Day Sales Chart"}</span>
-            {showSalesAnalytics ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            <TrendingUp size={12} />
+            <span>{showSalesAnalytics ? "Hide Chart" : "Sales Chart"}</span>
+            {showSalesAnalytics ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </button>
 
-          <div className="bg-white border border-neutral-200 rounded-xl px-3.5 py-1.5 flex items-center gap-2">
-            <span className="text-neutral-500 text-xs font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Active Orders:</span>
-            <span className="text-black font-semibold text-sm" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{orders.length}</span>
+          <div className="bg-white border border-neutral-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
+            <span className="text-neutral-500 text-xs font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Active:</span>
+            <span className="text-black font-semibold text-xs" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{orders.length}</span>
           </div>
 
           <button
-            onClick={() => toast.success("Synced latest orders")}
-            className="flex items-center gap-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs px-3 py-2 rounded-xl transition cursor-pointer font-normal"
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="flex items-center gap-1.5 bg-black hover:bg-neutral-800 disabled:bg-neutral-400 text-white text-xs px-3 py-1.5 rounded-lg transition cursor-pointer font-medium shadow-2xs"
             style={{ fontFamily: "'Ubuntu', sans-serif" }}
+            title={`Last synced: ${new Date(lastSyncedAt).toLocaleTimeString()}`}
           >
-            <RefreshCw size={13} /> Refresh Sync
+            <RefreshCw size={13} className={isSyncing ? "animate-spin" : ""} />
+            <span>{isSyncing ? "Syncing..." : "Sync Orders"}</span>
           </button>
         </div>
       </div>
@@ -206,59 +253,59 @@ export default function AdminOrdersPage() {
       {/* 30-Day Sales Performance Visualization */}
       {showSalesAnalytics && (
         <div className="transition-all duration-300">
-          <SalesPerformanceChart />
+          <SalesPerformanceChart orders={orders} />
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white border border-neutral-200 rounded-xl p-3.5 shadow-2xs">
-          <div className="text-neutral-500 text-[10px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Pending Review</div>
-          <div className="text-blue-950 text-2xl font-normal mt-1" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="bg-white border border-neutral-200 rounded-xl p-2.5 shadow-2xs">
+          <div className="text-neutral-500 text-[9px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Pending Review</div>
+          <div className="text-blue-950 text-xl font-normal mt-0.5" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
             {orders.filter((o) => o.orderStatus === "REVIEW").length}
           </div>
         </div>
 
-        <div className="bg-white border border-neutral-200 rounded-xl p-3.5 shadow-2xs">
-          <div className="text-neutral-500 text-[10px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>In Preparation</div>
-          <div className="text-blue-950 text-2xl font-normal mt-1" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+        <div className="bg-white border border-neutral-200 rounded-xl p-2.5 shadow-2xs">
+          <div className="text-neutral-500 text-[9px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>In Preparation</div>
+          <div className="text-blue-950 text-xl font-normal mt-0.5" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
             {orders.filter((o) => ["PAYMENT_CONFIRMED", "START_PACKING", "READY"].includes(o.orderStatus)).length}
           </div>
         </div>
 
-        <div className="bg-white border border-neutral-200 rounded-xl p-3.5 shadow-2xs">
-          <div className="text-neutral-500 text-[10px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Out for Delivery</div>
-          <div className="text-blue-950 text-2xl font-normal mt-1" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+        <div className="bg-white border border-neutral-200 rounded-xl p-2.5 shadow-2xs">
+          <div className="text-neutral-500 text-[9px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Out for Delivery</div>
+          <div className="text-blue-950 text-xl font-normal mt-0.5" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
             {orders.filter((o) => ["AWAITING_RIDER", "DISPATCHED"].includes(o.orderStatus)).length}
           </div>
         </div>
 
-        <div className="bg-white border border-neutral-200 rounded-xl p-3.5 shadow-2xs">
-          <div className="text-neutral-500 text-[10px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Delivered</div>
-          <div className="text-blue-950 text-2xl font-normal mt-1" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+        <div className="bg-white border border-neutral-200 rounded-xl p-2.5 shadow-2xs">
+          <div className="text-neutral-500 text-[9px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Delivered</div>
+          <div className="text-blue-950 text-xl font-normal mt-0.5" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
             {orders.filter((o) => o.orderStatus === "DELIVERED").length}
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3">
-        <div className="flex-1 flex items-center gap-2 bg-white border border-neutral-200 rounded-xl px-3 py-2 shadow-2xs">
-          <Search size={15} className="text-neutral-400" />
+      <div className="flex flex-col md:flex-row gap-2">
+        <div className="flex-1 flex items-center gap-2 bg-white border border-neutral-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
+          <Search size={14} className="text-neutral-400" />
           <input
             type="text"
             placeholder="Search by order #, customer, phone, or handle..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-transparent text-sm text-black placeholder-neutral-400 outline-none font-normal"
+            className="w-full bg-transparent text-xs text-black placeholder-neutral-400 outline-none font-normal"
             style={{ fontFamily: "'Ubuntu', sans-serif" }}
           />
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
           {["ALL", "REVIEW", "START_PACKING", "DISPATCHED", "DELIVERED"].map((st) => (
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-normal whitespace-nowrap cursor-pointer transition ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-normal whitespace-nowrap cursor-pointer transition ${
                 statusFilter === st ? "bg-black text-white" : "bg-white text-neutral-600 hover:text-black border border-neutral-200"
               }`}
               style={{ fontFamily: "'Ubuntu', sans-serif" }}
@@ -270,8 +317,18 @@ export default function AdminOrdersPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-3">
-          {loading ? (
+        <div className="lg:col-span-2 space-y-3 relative">
+          {isSyncing && (
+            <div className="bg-neutral-900 text-white text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-md border border-neutral-700 animate-pulse font-mono">
+              <div className="flex items-center gap-2">
+                <RefreshCw size={13} className="animate-spin text-amber-400" />
+                <span>Forced-fetching real-time order entries from Firestore...</span>
+              </div>
+              <span className="text-[10px] text-amber-300 font-semibold uppercase tracking-wider">Syncing</span>
+            </div>
+          )}
+
+          {loading || isSyncing ? (
             <OrderListSkeleton />
           ) : filteredOrders.length === 0 ? (
             <div className="bg-white border border-neutral-200 rounded-2xl p-12 text-center text-neutral-400">
@@ -559,28 +616,60 @@ export default function AdminOrdersPage() {
 
               <div className="space-y-2 pt-2 border-t border-neutral-100">
                 <div className="text-xs font-normal text-neutral-400 uppercase tracking-wider" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-                  Customer & Delivery
+                  Customer & Delivery Details
                 </div>
-                <div className="bg-neutral-50 rounded-xl p-3 text-xs space-y-1.5 font-normal border border-neutral-100" style={{ fontFamily: "'Ubuntu', sans-serif", fontSize: "13px" }}>
-                  <div className="flex justify-between">
-                    <span className="text-neutral-500">Receiver:</span>
-                    <span className="text-black font-medium">{selectedOrder.receiverName}</span>
+                <div className="bg-neutral-50 rounded-xl p-3 text-xs space-y-2 font-normal border border-neutral-200/80" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
+                  {/* Telegram / Customer Profile Info */}
+                  <div className="pb-2 border-b border-neutral-200 space-y-1 bg-white p-2 rounded-lg border border-neutral-150">
+                    <div className="text-[10px] font-bold text-neutral-400 uppercase font-mono tracking-wider">
+                      Customer Profile
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Telegram Name:</span>
+                      <span className="text-black font-medium">{selectedOrder.telegramDisplayName || selectedOrder.receiverName}</span>
+                    </div>
+                    {selectedOrder.telegramUsername && (
+                      <div className="flex justify-between">
+                        <span className="text-neutral-500">Telegram Handle:</span>
+                        <span className="text-blue-600 font-mono font-medium">@{selectedOrder.telegramUsername}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Telegram UID:</span>
+                      <span className="text-neutral-700 font-mono">{selectedOrder.telegramUserId || "GUEST"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Prime Member ID:</span>
+                      <span className="text-neutral-950 font-mono font-bold">
+                        {selectedOrder.primeMemberId || (selectedOrder.telegramUserId ? `PC${selectedOrder.telegramUserId.slice(0, 8).toUpperCase()}` : "PC-GUEST")}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-neutral-500">Contact:</span>
-                    <span className="text-black font-medium">{selectedOrder.contactNumber}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-neutral-500">Courier:</span>
-                    <span className="text-black font-medium">{selectedOrder.courierName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-neutral-500">Payment:</span>
-                    <span className="text-black font-medium">{selectedOrder.paymentMethodName}</span>
-                  </div>
-                  <div className="pt-1 border-t border-neutral-200">
-                    <span className="text-neutral-500 block mb-0.5">Address:</span>
-                    <span className="text-neutral-800 leading-snug block">{selectedOrder.deliveryAddress}</span>
+
+                  {/* Receiver & Shipping Info */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Receiver Name:</span>
+                      <span className="text-black font-bold uppercase">{selectedOrder.receiverName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Contact No:</span>
+                      <span className="text-black font-mono font-medium">{selectedOrder.contactNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Courier:</span>
+                      <span className="text-black font-medium">{selectedOrder.courierName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Payment Method:</span>
+                      <span className="text-black font-medium">{selectedOrder.paymentMethodName}</span>
+                    </div>
+                    <div className="pt-1.5 border-t border-neutral-200">
+                      <span className="text-neutral-500 block mb-0.5 font-semibold">Delivery Address:</span>
+                      <span className="text-neutral-800 leading-snug block bg-white p-2 rounded-lg border border-neutral-200 text-xs">
+                        {selectedOrder.deliveryAddress}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

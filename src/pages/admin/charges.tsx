@@ -90,9 +90,9 @@ export default function AdminChargesPage() {
   };
 
   return (
-    <section className="p-3 sm:p-5 max-w-2xl mx-auto space-y-4 bg-white text-black min-h-screen font-condensed">
+    <section className="p-3 sm:p-4 w-full max-w-full space-y-3 bg-white text-black min-h-screen font-condensed">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-neutral-200 pb-3">
+      <div className="flex items-center justify-between border-b border-neutral-200 pb-2.5">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -102,10 +102,10 @@ export default function AdminChargesPage() {
             <ArrowLeft size={18} />
           </button>
           <div>
-            <h1 className="text-xl font-bold uppercase tracking-tight">
+            <h1 className="text-lg sm:text-xl font-bold uppercase tracking-tight">
               CHARGES & PLATFORM SURCHARGES
             </h1>
-            <p className="text-xs text-neutral-500 font-sans">
+            <p className="text-[11px] text-neutral-500 font-sans">
               Server-authoritative checkout fees and delivery surcharges
             </p>
           </div>
@@ -113,15 +113,15 @@ export default function AdminChargesPage() {
       </div>
 
       {/* Preset Quick Fill */}
-      <div className="space-y-1.5">
-        <span className="text-[11px] uppercase text-neutral-500 font-bold">Quick Templates:</span>
+      <div className="space-y-1">
+        <span className="text-[10px] uppercase text-neutral-500 font-bold">Quick Templates:</span>
         <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
           {CHARGE_PRESETS.map((p, i) => (
             <button
               key={i}
               type="button"
               onClick={() => applyPreset(p)}
-              className="px-2.5 py-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-lg whitespace-nowrap"
+              className="px-2 py-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-lg whitespace-nowrap text-[11px] font-sans"
             >
               + {p.name} ({p.type === "percent" ? `${p.amount}%` : `₱${p.amount}`})
             </button>
@@ -130,8 +130,8 @@ export default function AdminChargesPage() {
       </div>
 
       {/* Add Charge Form */}
-      <div className="bg-neutral-50 border border-neutral-300 rounded-xl p-3 space-y-2">
-        <div className="text-xs font-bold uppercase text-neutral-700">Add New Charge Rule</div>
+      <div className="bg-neutral-50 border border-neutral-300 rounded-xl p-2.5 space-y-2">
+        <div className="text-[11px] font-bold uppercase text-neutral-700">Add New Charge Rule</div>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
           <input
             className="sm:col-span-2 border border-neutral-300 bg-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-black font-sans"
@@ -169,34 +169,34 @@ export default function AdminChargesPage() {
         </div>
       </div>
 
-      {/* Charges List */}
+      {/* Charges Stacked Cards */}
       <div className="space-y-2">
-        <div className="text-xs font-bold uppercase text-neutral-700">Active Pricing Rules ({charges.length})</div>
+        <div className="text-[11px] font-bold uppercase text-neutral-700">Active Pricing Rules ({charges.length})</div>
         {charges.length === 0 ? (
           <div className="text-center py-8 text-xs text-neutral-400 font-sans">No charges configured yet.</div>
         ) : (
           charges.map((c) => (
             <div
               key={c.id}
-              className="bg-white border border-neutral-200 rounded-xl p-3 flex items-center justify-between gap-3 shadow-2xs"
+              className="bg-white border border-neutral-200 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-2xs"
             >
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm text-neutral-900 truncate uppercase">{c.name}</div>
-                <div className="text-xs text-neutral-500 font-sans mt-0.5">
+                <div className="font-bold text-xs sm:text-sm text-neutral-900 truncate uppercase">{c.name}</div>
+                <div className="text-[11px] text-neutral-500 font-sans mt-0.5 flex items-center gap-2">
                   <span className="font-mono font-bold text-black">
                     {c.type === "percent" ? `${c.amount}%` : `₱${c.amount.toLocaleString()}`}
-                  </span>{" "}
-                  • Status:{" "}
+                  </span>
+                  <span>•</span>
                   <span className={c.active ? "text-emerald-700 font-bold" : "text-neutral-400"}>
                     {c.active ? "Active" : "Disabled"}
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => void toggle(c)}
-                  className={`text-xs px-2.5 py-1 rounded-lg uppercase border font-bold ${
+                  className={`text-[11px] px-2.5 py-1 rounded-lg uppercase border font-bold ${
                     c.active
                       ? "bg-neutral-100 text-neutral-700 border-neutral-300"
                       : "bg-emerald-600 text-white border-emerald-600"
@@ -207,9 +207,10 @@ export default function AdminChargesPage() {
                 <button
                   type="button"
                   onClick={() => void remove(c)}
-                  className="p-1 text-neutral-400 hover:text-red-600"
+                  className="p-1 text-neutral-400 hover:text-red-600 cursor-pointer"
+                  title="Delete charge"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={15} />
                 </button>
               </div>
             </div>
