@@ -7,7 +7,6 @@ const TG_COOKIE = "prime_telegram_session";
 const TG_TTL_MS = 24 * 60 * 60 * 1000;
 const DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || "ai-studio-primecommerce-f59766ab-326b-40a2-bcc8-eae7f46dfe5f";
 const TAX_RATE = 0.05;
-const FREE_DELIVERY_THRESHOLD = 2500;
 const FALLBACK_COURIERS: Record<string, any> = {
   "courier-1": { name: "PRIME In-House Express", baseFare: 60, baseDistanceKm: 4, perKmCharge: 12, platformFeeEnabled: false, platformFee: 0, nightDifferentialEnabled: true, nightDifferentialFee: 30, surchargeEnabled: false, surchargeFee: 0, isAvailable: true },
   "courier-2": { name: "Lalamove 2-Wheel", baseFare: 70, baseDistanceKm: 3, perKmCharge: 15, platformFeeEnabled: true, platformFee: 10, nightDifferentialEnabled: true, nightDifferentialFee: 40, surchargeEnabled: true, surchargeFee: 20, isAvailable: true },
@@ -16,6 +15,7 @@ const FALLBACK_COURIERS: Record<string, any> = {
 
 type PaymentMethod = "TELEGRAM_PAY" | "DIRECT_TRANSFER";
 type DeliveryPaymentOption = "PAY_AT_CHECKOUT" | "PAY_UPON_FULFILLMENT";
+type AppliedPromo = { code: string; freeDelivery: boolean };
 
 function db() {
   if (!getApps().length) {
@@ -81,7 +81,28 @@ function validateItems(input: any) {
   });
 }
 
-async function buildQuote(input: any) {
+async function resolvePromo(firestore: FirebaseFirestore.Firestore, telegramId: string, rawCode: unknown, subtotal: number): Promise<AppliedPromo | null> {
+  const code = String(rawCode || "").trim().toUpperCase();
+  if (!code) return null;
+  if (code.length < 3 || code.length > 64 || !/^[A-Z0-9_-]+$/.test(code)) throw new Error("Invalid promo code");
+  const snap = await firestore.collection("promos").doc(code).get();
+  if (!snap.exists) throw new Error("Promo code is invalid or unavailable");
+  const promo: any = snap.data() || {};
+  if (promo.active !== true) throw new Error("Promo code is inactive");
+  if (promo.freeDelivery !== true) throw new Error("Promo code is not a free-delivery promotion");
+  const eligible = Array.isArray(promo.eligibleTelegramUserIds) ? promo.eligibleTelegramUserIds.map(String) : [];
+  if (!eligible.includes(telegramId)) throw new Error("This promo code is not available for your account");
+  const minSubtotal = number(promo.minSubtotal, 0);
+  if (subtotal < minSubtotal) throw new Error(`This promo requires a minimum subtotal of PHP ${minSubtotal.toFixed(2)}`);
+  const now = Date.now();
+  const startsAt = promo.startsAt?.toMillis ? promo.startsAt.toMillis() : (promo.startsAt ? Date.parse(String(promo.startsAt)) : NaN);
+  const expiresAt = promo.expiresAt?.toMillis ? promo.expiresAt.toMillis() : (promo.expiresAt ? Date.parse(String(promo.expiresAt)) : NaN);
+  if (Number.isFinite(startsAt) && now < startsAt) throw new Error("Promo code is not active yet");
+  if (Number.isFinite(expiresAt) && now > expiresAt) throw new Error("Promo code has expired");
+  return { code, freeDelivery: true };
+}
+
+async function buildQuote(input: any, telegramId: string) {
   const items = validateItems(input.items);
   const firestore = db();
   const productRefs = items.map((item) => firestore.collection("products").doc(item.productId));
@@ -111,7 +132,8 @@ async function buildQuote(input: any) {
   if (!courier) throw new Error("Selected delivery provider is unavailable");
   if (courier.isAvailable !== true) throw new Error("Selected delivery provider is currently unavailable");
 
-  const deliveryCharge = subtotal > FREE_DELIVERY_THRESHOLD ? 0 : calculateCourierCharge(courier, distanceKm);
+  const promo = await resolvePromo(firestore, telegramId, input.promoCode, subtotal);
+  const deliveryCharge = promo?.freeDelivery ? 0 : calculateCourierCharge(courier, distanceKm);
   const deliveryPaymentOption: DeliveryPaymentOption = input.deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? "PAY_UPON_FULFILLMENT" : "PAY_AT_CHECKOUT";
   const deliveryDueNow = deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? 0 : deliveryCharge;
 
@@ -125,7 +147,7 @@ async function buildQuote(input: any) {
   const tax = roundMoney((subtotal + charges) * TAX_RATE);
   const total = roundMoney(subtotal + charges + tax + deliveryDueNow);
   const fulfillmentTotal = roundMoney(subtotal + charges + tax + deliveryCharge);
-  return { items, normalizedItems, subtotal, charges, tax, deliveryCharge, deliveryDueNow, fulfillmentTotal, total, courier: { id: courierSnap.exists ? courierSnap.id : courierId, name: String(courier.name || "Delivery Provider") }, distanceKm, deliveryPaymentOption };
+  return { items, normalizedItems, subtotal, charges, tax, deliveryCharge, deliveryDueNow, fulfillmentTotal, total, courier: { id: courierSnap.exists ? courierSnap.id : courierId, name: String(courier.name || "Delivery Provider") }, distanceKm, deliveryPaymentOption, promo };
 }
 
 function setTelegramSession(res: Response, userId: string) {
@@ -141,8 +163,8 @@ export function installCheckoutRoutes(app: Application) {
     const tg = telegramUserId(req);
     if (!tg) return res.status(401).json({ error: "Verified Telegram identity required" });
     try {
-      const quote = await buildQuote(req.body || {});
-      return res.json({ quote: { subtotal: quote.subtotal, charges: quote.charges, tax: quote.tax, deliveryCharge: quote.deliveryCharge, deliveryDueNow: quote.deliveryDueNow, total: quote.total, fulfillmentTotal: quote.fulfillmentTotal, distanceKm: quote.distanceKm, deliveryPaymentOption: quote.deliveryPaymentOption, courierName: quote.courier.name, currency: "PHP" } });
+      const quote = await buildQuote(req.body || {}, tg);
+      return res.json({ quote: { subtotal: quote.subtotal, charges: quote.charges, tax: quote.tax, deliveryCharge: quote.deliveryCharge, deliveryDueNow: quote.deliveryDueNow, total: quote.total, fulfillmentTotal: quote.fulfillmentTotal, distanceKm: quote.distanceKm, deliveryPaymentOption: quote.deliveryPaymentOption, courierName: quote.courier.name, promoCode: quote.promo?.code || null, freeDelivery: Boolean(quote.promo?.freeDelivery), currency: "PHP" } });
     } catch (error: any) {
       return res.status(400).json({ error: error?.message || "Unable to calculate checkout quote" });
     }
@@ -163,7 +185,7 @@ export function installCheckoutRoutes(app: Application) {
       if (!["Telegram Pay", "Direct Transfer / GCash / Maya"].includes(paymentMethodName)) throw new Error("Invalid payment method");
       const deliveryPaymentOption: DeliveryPaymentOption = input.deliveryPaymentOption === "PAY_UPON_FULFILLMENT" ? "PAY_UPON_FULFILLMENT" : "PAY_AT_CHECKOUT";
       const paymentMethod: PaymentMethod = paymentMethodName === "Telegram Pay" ? "TELEGRAM_PAY" : "DIRECT_TRANSFER";
-      const quote = await buildQuote({ ...input, deliveryPaymentOption });
+      const quote = await buildQuote({ ...input, deliveryPaymentOption }, tg);
       if (paymentMethod === "DIRECT_TRANSFER" && !input.receiptUrl) throw new Error("Payment proof is required for direct transfer");
 
       const firestore = db();
@@ -218,6 +240,8 @@ export function installCheckoutRoutes(app: Application) {
           receiptUrl: input.receiptUrl ? String(input.receiptUrl).slice(0, 8_000_000) : null,
           receiptOcrData: input.receiptOcrData || null,
           distanceKm: quote.distanceKm,
+          promoCode: quote.promo?.code || null,
+          freeDeliveryPromo: Boolean(quote.promo?.freeDelivery),
           createdAt: now,
           updatedAt: now,
         };
