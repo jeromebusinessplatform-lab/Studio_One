@@ -21,6 +21,7 @@ import AdminDashboard from "./pages/admin/dashboard.tsx";
 import AdminOrdersPage from "./pages/admin/orders.tsx";
 import AdminCustomersPage from "./pages/admin/customers.tsx";
 import AdminProductsPage from "./pages/admin/products.tsx";
+import AdminComparisonPage from "./pages/admin/comparison.tsx";
 import AdminSettingsPage from "./pages/admin/settings.tsx";
 import AdminCourierPage from "./pages/admin/courier.tsx";
 import AdminReceiptOcrPage from "./pages/admin/receipt-ocr.tsx";
@@ -62,6 +63,7 @@ function AppShell() {
             <Route index element={<AdminDashboard />} />
             <Route path="orders" element={<AdminOrdersPage />} />
             <Route path="products" element={<AdminProductsPage />} />
+            <Route path="comparison" element={<AdminComparisonPage />} />
             <Route path="customers" element={<AdminCustomersPage />} />
             <Route path="courier" element={<AdminCourierPage />} />
             <Route path="charges" element={<AdminChargesPage />} />
