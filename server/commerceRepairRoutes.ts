@@ -72,11 +72,7 @@ async function resolveCode(code: string, kind: "coupon" | "referral", telegramId
   if (!Number.isFinite(minSubtotal) || subtotal < minSubtotal) return null;
   const value = Number(promo.value || 0);
   const discount = promo.type === "percent" ? Math.round(subtotal * Math.max(0, value) / 100 * 100) / 100 : Math.round(Math.min(subtotal, Math.max(0, value)) * 100) / 100;
-  return {
-    code,
-    discount,
-    freeDelivery: promo.freeDelivery === true || promo.type === "free_delivery",
-  };
+  return { code, discount, freeDelivery: promo.freeDelivery === true || promo.type === "free_delivery" };
 }
 
 function cleanCourierConfig(body: any) {
@@ -85,19 +81,13 @@ function cleanCourierConfig(body: any) {
   const priorityFee = Number(body?.priorityFee ?? 0);
   const expressFee = Number(body?.expressFee ?? 0);
   if (!Number.isFinite(priorityFee) || priorityFee < 0 || !Number.isFinite(expressFee) || expressFee < 0) throw new Error("Invalid delivery tier fee");
-  return {
-    deliveryType,
-    tier: deliveryType,
-    priorityFee: Math.round(priorityFee * 100) / 100,
-    expressFee: Math.round(expressFee * 100) / 100,
-    updatedAt: Date.now(),
-  };
+  return { deliveryType, tier: deliveryType, priorityFee: Math.round(priorityFee * 100) / 100, expressFee: Math.round(expressFee * 100) / 100, updatedAt: Date.now() };
 }
 
 export function installCommerceRepairRoutes(app: Application) {
   app.post("/api/checkout/validate-code", async (req, res) => {
     try {
-      const telegramId = telegramUserId(req) || String(req.body?.telegramUserId || "").trim();
+      const telegramId = telegramUserId(req);
       if (!telegramId) return res.status(401).json({ valid: false, error: "Customer authentication required" });
       const code = normalizeCode(req.body?.code);
       const kind = req.body?.kind === "referral" ? "referral" : "coupon";
