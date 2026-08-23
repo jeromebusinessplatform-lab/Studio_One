@@ -1,22 +1,8 @@
-import { useState, useEffect } from "react";
+import { Package } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useTelegram } from "@/context/TelegramContext.tsx";
 import { useOrders, type CustomerOrder } from "@/hooks/useOrders.ts";
-import { useReviews } from "@/hooks/useReviews.ts";
-import { Package, Clock, Truck, Star, MessageSquare, CheckCircle2, ChevronRight, MapPin } from "lucide-react";
-import { Link } from "react-router-dom";
 import { formatCurrency } from "@/lib/utils.ts";
-import { StarRating } from "@/components/StarRating.tsx";
-import { ProductReviewModal } from "@/components/ProductReviewModal.tsx";
-
-// Mock tracking component
-const OrderTracker = ({ orderId, lat, lon }: { orderId: string, lat: number, lon: number }) => {
-  const [tracking, setTracking] = useState<any>(null);
-  useEffect(() => {
-    fetch(`/api/courier-location?lat=${lat}&lon=${lon}`).then(res => res.json()).then(setTracking);
-  }, [lat, lon]);
-  if (!tracking) return <div className="text-xs text-neutral-500">Tracking...</div>;
-  return <div className="text-xs font-mono text-blue-600 bg-blue-50 p-2 rounded">Courier: {tracking.features?.[0]?.properties?.distance ? (tracking.features[0].properties.distance/1000).toFixed(1) : "?"} km away</div>;
-}
 
 const STATUS_LABELS: Record<string, string> = {
   REVIEW: "Under Review",
@@ -35,220 +21,90 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  REVIEW: "#f97316",
-  PAYMENT_CONFIRMED: "#22c55e",
-  START_PACKING: "#3b82f6",
-  READY: "#22c55e",
-  AWAITING_RIDER: "#3b82f6",
-  DISPATCHED: "#3b82f6",
-  DELIVERED: "#22c55e",
-  PAYMENT_FAILED: "#ef4444",
-  HOLD_ORDER: "#f97316",
-  REQUEST_RESUBMIT: "#f97316",
-  PAYMENT_CLEARED: "#22c55e",
-  FINAL_FOLLOW_UP: "#f97316",
-  REJECTED: "#ef4444",
-  CANCELLED: "#6b7280",
+const STATUS_CLASSES: Record<string, string> = {
+  REVIEW: "bg-orange-50 text-orange-700 border-orange-200",
+  PAYMENT_CONFIRMED: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  START_PACKING: "bg-blue-50 text-blue-700 border-blue-200",
+  READY: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  AWAITING_RIDER: "bg-blue-50 text-blue-700 border-blue-200",
+  DISPATCHED: "bg-blue-50 text-blue-700 border-blue-200",
+  DELIVERED: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  PAYMENT_FAILED: "bg-red-50 text-red-700 border-red-200",
+  HOLD_ORDER: "bg-orange-50 text-orange-700 border-orange-200",
+  REQUEST_RESUBMIT: "bg-orange-50 text-orange-700 border-orange-200",
+  PAYMENT_CLEARED: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  FINAL_FOLLOW_UP: "bg-orange-50 text-orange-700 border-orange-200",
+  REJECTED: "bg-red-50 text-red-700 border-red-200",
+  CANCELLED: "bg-neutral-100 text-neutral-600 border-neutral-200",
 };
 
 export default function OrdersPage() {
   const { customer } = useTelegram();
-  const { orders, loading } = useOrders(customer?.telegramUserId);
-  const { reviews, getReviewForOrderItem } = useReviews();
-
-  // Review Modal State
-  const [reviewModalState, setReviewModalState] = useState<{
-    isOpen: boolean;
-    productId: string;
-    productName: string;
-    orderId: string;
-    orderNumber: string;
-    existingReview?: any;
-  }>({
-    isOpen: false,
-    productId: "",
-    productName: "",
-    orderId: "",
-    orderNumber: "",
-  });
-
-  const handleOpenReview = (order: CustomerOrder, item: CustomerOrder["items"][0]) => {
-    const existing = getReviewForOrderItem(order._id, item.productId);
-    setReviewModalState({
-      isOpen: true,
-      productId: item.productId,
-      productName: item.productName,
-      orderId: order._id,
-      orderNumber: order.orderNumber,
-      existingReview: existing,
-    });
-  };
+  const { orders, loading, syncOrders } = useOrders(customer?.telegramUserId);
 
   return (
     <div className="bg-[#f3f4f6] min-h-full pb-10">
       <div className="bg-white border-b border-neutral-200 px-4 py-3 flex items-center justify-between">
         <div>
-          <h1
-            className="text-black font-normal uppercase text-xl leading-tight"
-            style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
-          >
+          <h1 className="text-black font-normal uppercase text-xl leading-tight" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
             MY ORDERS
           </h1>
           <p className="text-xs text-neutral-500 font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-            Live order queue, fulfillment tracking & product reviews
+            Order number, date, amount & status
           </p>
         </div>
-        <Link
-          to="/shop"
+        <button
+          type="button"
+          onClick={() => void syncOrders()}
           className="text-xs text-black border border-neutral-200 px-3 py-1.5 rounded-lg hover:bg-neutral-50 font-normal"
           style={{ fontFamily: "'Ubuntu', sans-serif" }}
         >
-          Shop More
-        </Link>
+          REFRESH
+        </button>
       </div>
 
       {loading ? (
-        <div className="p-3 space-y-2.5">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-2xl border border-neutral-200/90 p-3.5 shadow-xs animate-pulse">
-              <div className="flex items-start justify-between mb-2">
-                <div className="w-1/3 h-4 bg-neutral-200 rounded"></div>
-                <div className="w-1/4 h-4 bg-neutral-200 rounded-full"></div>
-              </div>
-              <div className="space-y-2 py-1">
-                <div className="h-3 bg-neutral-100 rounded w-full"></div>
-                <div className="h-3 bg-neutral-100 rounded w-2/3"></div>
-              </div>
-            </div>
+        <div className="p-3 space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-16 bg-white rounded-xl border border-neutral-200 animate-pulse" />
           ))}
         </div>
       ) : orders.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-neutral-400 bg-white m-3 rounded-2xl border border-neutral-200 p-8">
-          <Package size={48} className="mb-3 opacity-30" />
+          <Package size={44} className="mb-3 opacity-30" />
           <p className="font-normal text-neutral-700" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-            No active orders
+            NO ORDERS FOUND
           </p>
-          <Link
-            to="/shop"
-            className="mt-4 text-xs bg-black text-white font-normal px-4 py-2 rounded-xl"
-            style={{ fontFamily: "'Ubuntu', sans-serif" }}
-          >
+          <Link to="/shop" className="mt-4 text-xs bg-black text-white font-normal px-4 py-2 rounded-xl" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
             BROWSE PRODUCTS
           </Link>
         </div>
       ) : (
-        <div className="p-3 space-y-2.5">
-          {orders.map((order: CustomerOrder) => (
-            <div
-              key={order._id}
-              className="bg-white rounded-2xl border border-neutral-200/90 p-3.5 shadow-xs space-y-3"
-            >
-              <div className="flex items-start justify-between border-b border-neutral-100 pb-2.5">
-                <div>
-                  <div
-                    className="text-black font-normal leading-tight flex items-center gap-1.5"
-                    style={{
-                      fontFamily: "'Roboto Condensed', sans-serif",
-                      fontSize: "17px",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    <span>#{order.orderNumber}</span>
-                  </div>
-                  <div className="text-[11px] text-neutral-400 mt-0.5 font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                    {new Date(order._creationTime).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </div>
-                </div>
-
-                <span
-                  className="text-[10px] font-normal px-2.5 py-0.5 rounded-full text-white uppercase"
-                  style={{
-                    backgroundColor: STATUS_COLORS[order.orderStatus] ?? "#6b7280",
-                    fontFamily: "'Roboto Condensed', sans-serif",
-                    letterSpacing: "0.5px",
-                  }}
-                >
-                  {STATUS_LABELS[order.orderStatus] ?? order.orderStatus}
-                </span>
-              </div>
-
-              {/* Items summary */}
-              <div className="space-y-2">
-                <div className="text-[11px] font-medium text-neutral-400 uppercase tracking-wider" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-                  Purchased Items
-                </div>
-
-                <div className="divide-y divide-neutral-100 space-y-1.5">
-                  {order.items.map((it, idx) => (
-                    <div key={idx} className="pt-2 first:pt-0 flex justify-between items-start text-xs font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                      <div className="pr-2 font-medium text-black">
-                        <span className="font-bold text-neutral-800">{it.quantity}x</span> {it.productName}
-                      </div>
-                      <span className="font-semibold text-neutral-900 shrink-0 font-mono">
-                        {formatCurrency(it.subtotal)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Order total info */}
-              <div className="flex items-center justify-between text-sm pt-2 border-t border-neutral-100">
-                <span className="text-xs text-neutral-500 font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                  {order.items.reduce((s, i) => s + i.quantity, 0)} items total
-                </span>
-                <span
-                  className="text-black font-semibold font-mono"
-                  style={{ fontFamily: "'Ubuntu', sans-serif", fontSize: "18px" }}
-                >
-                  {formatCurrency(order.total)}
-                </span>
-              </div>
-
-              {!["DELIVERED", "CANCELLED", "REJECTED"].includes(order.orderStatus) && (
-                <div className="mt-2 pt-2 border-t border-neutral-100 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-neutral-600 bg-neutral-50/80 -mx-3.5 p-2.5 font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                    <div className="flex items-center gap-1.5 font-normal">
-                      <Clock size={13} className="text-orange-500" />
-                      <span>
-                        Queue #{order.queuePosition} • {order.estimatedWaitingMinutes} min wait
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 font-normal">
-                      <Truck size={13} className="text-blue-500" />
-                      <span>{order.estimatedDispatchTime}</span>
-                    </div>
-                  </div>
-                  {["DISPATCHED", "AWAITING_RIDER"].includes(order.orderStatus) && (
-                    <OrderTracker orderId={order._id} lat={14.5516} lon={121.0503} />
-                  )}
-                </div>
-              )}
+        <div className="p-3">
+          <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm">
+            <div className="grid grid-cols-[1.25fr_1fr_0.9fr_1.1fr] gap-2 px-3 py-2.5 bg-neutral-50 border-b border-neutral-200 text-[9px] font-bold uppercase tracking-wider text-neutral-500" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
+              <span>Order Number</span>
+              <span>Date</span>
+              <span>Amount</span>
+              <span>Status</span>
             </div>
-          ))}
+            <div className="divide-y divide-neutral-100">
+              {orders.map((order: CustomerOrder) => (
+                <div key={order._id} className="grid grid-cols-[1.25fr_1fr_0.9fr_1.1fr] gap-2 items-center px-3 py-3 text-[10px]" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
+                  <span className="font-mono font-bold text-neutral-900 truncate">#{order.orderNumber}</span>
+                  <span className="text-neutral-500 leading-tight">
+                    {new Date(order._creationTime).toLocaleDateString("en-PH", { month: "short", day: "2-digit", year: "numeric" })}
+                  </span>
+                  <span className="font-mono font-bold text-neutral-900">{formatCurrency(order.total)}</span>
+                  <span className={`justify-self-start max-w-full truncate border rounded-full px-2 py-1 text-[8px] font-bold uppercase ${STATUS_CLASSES[order.orderStatus] || "bg-neutral-100 text-neutral-600 border-neutral-200"}`}>
+                    {STATUS_LABELS[order.orderStatus] || order.orderStatus}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
-
-      {/* Review Modal */}
-      <ProductReviewModal
-        isOpen={reviewModalState.isOpen}
-        onClose={() => setReviewModalState((prev) => ({ ...prev, isOpen: false }))}
-        productId={reviewModalState.productId}
-        productName={reviewModalState.productName}
-        orderId={reviewModalState.orderId}
-        orderNumber={reviewModalState.orderNumber}
-        userId={customer?.telegramUserId || "1085949511"}
-        userName={customer?.telegramDisplayName || "Marcus Vance"}
-        existingReview={reviewModalState.existingReview}
-      />
     </div>
   );
 }
-
