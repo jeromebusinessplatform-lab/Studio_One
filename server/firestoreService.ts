@@ -75,7 +75,7 @@ export function documentToPlain(doc: any): any {
 }
 
 const inMemoryCache: Record<string, Map<string, any>> = {
-  orders: new Map(), customers: new Map(), couriers: new Map(), courierConfigs: new Map(), charges: new Map(), discounts: new Map(), products: new Map(), notifications: new Map(), systemConfig: new Map(),
+  orders: new Map(), customers: new Map(), couriers: new Map(), courierConfigs: new Map(), charges: new Map(), discounts: new Map(), products: new Map(), notifications: new Map(), systemConfig: new Map(), coupons: new Map(), couponRedemptions: new Map(), referrals: new Map(),
 };
 
 async function mergeCourierConfig(courier: any): Promise<any> {
@@ -98,6 +98,12 @@ async function mergeCourierConfig(courier: any): Promise<any> {
   }
 }
 
+function fieldsFor(data: Record<string, any>) {
+  const fields: Record<string, any> = {};
+  for (const [k, v] of Object.entries(data)) if (k !== "id" && v !== undefined) fields[k] = toFirestoreValue(v);
+  return fields;
+}
+
 export const firestoreService = {
   async getDocuments(collection: string, forceFresh = false): Promise<any[]> {
     try {
@@ -112,6 +118,7 @@ export const firestoreService = {
         inMemoryCache[collection] = cache;
         return docs;
       }
+      throw new Error(`Firestore list ${collection} returned ${response.status}`);
     } catch (e) {
       console.warn(`Firestore REST list warning for ${collection}:`, (e as any)?.message || e);
     }
@@ -131,6 +138,7 @@ export const firestoreService = {
         cache.set(id, plain);
         return plain;
       }
+      if (response.status !== 404) throw new Error(`Firestore get ${collection}/${id} returned ${response.status}`);
     } catch (e) {
       console.warn(`Firestore REST get warning for ${collection}/${id}:`, (e as any)?.message || e);
     }
@@ -153,19 +161,26 @@ export const firestoreService = {
     }
 
     const merged = { ...existing, ...incoming, id, updatedAt: Date.now() };
-    const cache = inMemoryCache[collection] || (inMemoryCache[collection] = new Map());
-    cache.set(id, merged);
+    const previous = inMemoryCache[collection]?.get(id);
 
     try {
-      const fields: Record<string, any> = {};
-      for (const [k, v] of Object.entries(merged)) if (k !== "id" && v !== undefined) fields[k] = toFirestoreValue(v);
-      const url = `${BASE_URL}/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?key=${API_KEY}`;
-      const response = await firestoreFetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fields }) });
-      if (!response.ok) console.warn(`Firestore REST set returned ${response.status} for ${collection}/${id}`);
+      if (merge && previous) {
+        const url = `${BASE_URL}/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?key=${API_KEY}`;
+        const response = await firestoreFetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fields: fieldsFor(merged) }) });
+        if (!response.ok) throw new Error(`Firestore update ${collection}/${id} returned ${response.status}`);
+      } else {
+        const url = `${BASE_URL}/${encodeURIComponent(collection)}?documentId=${encodeURIComponent(id)}&key=${API_KEY}`;
+        const response = await firestoreFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fields: fieldsFor(merged) }) });
+        if (!response.ok) throw new Error(`Firestore create ${collection}/${id} returned ${response.status}`);
+      }
     } catch (e) {
-      console.warn(`Firestore REST set error for ${collection}/${id}:`, (e as any)?.message || e);
+      console.error(`Firestore REST write error for ${collection}/${id}:`, (e as any)?.message || e);
+      if (previous) inMemoryCache[collection]?.set(id, previous);
+      throw e;
     }
 
+    const cache = inMemoryCache[collection] || (inMemoryCache[collection] = new Map());
+    cache.set(id, merged);
     return merged;
   },
 
@@ -184,9 +199,10 @@ export const firestoreService = {
     try {
       const url = `${BASE_URL}/${encodeURIComponent(collection)}/${encodeURIComponent(id)}?key=${API_KEY}`;
       const response = await firestoreFetch(url, { method: "DELETE", headers: { "Content-Type": "application/json" } });
-      return response.ok || response.status === 404;
+      if (!(response.ok || response.status === 404)) throw new Error(`Firestore delete ${collection}/${id} returned ${response.status}`);
+      return true;
     } catch (e) {
-      console.warn(`Firestore REST delete error for ${collection}/${id}:`, (e as any)?.message || e);
+      console.error(`Firestore REST delete error for ${collection}/${id}:`, (e as any)?.message || e);
       return false;
     }
   },
