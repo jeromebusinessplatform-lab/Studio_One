@@ -6,6 +6,7 @@ import { User, Pencil } from "lucide-react";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "sonner";
+import { PrimeMemberLink } from "@/components/PrimeMemberProfile.tsx";
 
 export default function AccountPage() {
   const { customer, isAuthenticated, isTelegramEnv, error: telegramError, isLoading: isTelegramLoading } = useTelegram();
@@ -88,7 +89,7 @@ export default function AccountPage() {
           <div className="text-lg font-bold">{customerData.telegramDisplayName}</div>
           <div className="text-neutral-500 text-sm mb-4">{customerData.telegramUsername ? `@${customerData.telegramUsername}` : "Telegram Customer"}</div>
           <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-          <div className="grid grid-cols-2 gap-4 mt-2 text-xs text-left"><div className="border p-2 rounded"><div className="text-neutral-500">TELEGRAM UID</div><div>{customerData.telegramUserId}</div></div><div className="border p-2 rounded"><div className="text-neutral-500">PRIME MEMBER ID</div><div>{customerData.primeMemberId}</div></div></div>
+          <div className="grid grid-cols-2 gap-4 mt-2 text-xs text-left"><div className="border p-2 rounded"><div className="text-neutral-500">TELEGRAM UID</div><div>{customerData.telegramUserId}</div></div><div className="border p-2 rounded"><div className="text-neutral-500">PRIME MEMBER ID</div><PrimeMemberLink primeMemberId={customerData.primeMemberId} className="text-neutral-900 font-bold" /></div></div>
         </div>
 
         <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm space-y-2 text-sm">
@@ -112,7 +113,7 @@ export default function AccountPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm"><h2 className="font-bold mb-3 text-sm">RECENT ORDERS</h2><div className="space-y-2">{orders.slice(0, 5).map((order) => <div key={order._id} className="flex justify-between text-xs border-b pb-2"><div>{order.orderNumber}</div><div>{order.orderStatus}</div><div>₱{order.total.toFixed(2)}</div></div>)}{!orders.length && <div className="text-xs text-neutral-500">No orders yet.</div>}</div></div>
+        <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm"><h2 className="font-bold mb-3 text-sm">RECENT ORDERS</h2><div className="space-y-2">{orders.slice(0, 5).map((order) => <div key={order._id} className="flex justify-between text-xs border-b pb-2"><div>{order.orderNumber}</div><div>{order.orderStatus}</div><PrimeMemberLink primeMemberId={order.primeMemberId} className="text-neutral-700" /></div>)}{!orders.length && <div className="text-xs text-neutral-500">No orders yet.</div>}</div></div>
       </div>
     </div>
   );
