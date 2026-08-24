@@ -71,6 +71,23 @@ export async function ensureUniqueReferralCode(candidate: unknown, customerId: s
   return generateReferralCode(used);
 }
 
+async function ensureReferralRecord(referralCode: string, referrerId: string) {
+  const existing = await rawGetDocument("referrals", referralCode);
+  if (existing) return;
+  await rawWriteDocument("referrals", referralCode, {
+    id: referralCode,
+    code: referralCode,
+    type: "fixed",
+    value: 50,
+    minSubtotal: 0,
+    active: true,
+    isReferral: true,
+    referrerId,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }, false);
+}
+
 async function notifyMidMigration(telegramUserId: string, mid: string) {
   const notifications = await rawGetDocuments("notifications");
   const exists = notifications.some((n: any) =>
@@ -102,6 +119,7 @@ export async function ensureCustomerPrimeMemberId(customerId: string, telegramUs
   const next = await ensureUniquePrimeMemberId(current, id);
   const currentReferral = String(customer.referralCode || "").trim().toUpperCase();
   const nextReferral = await ensureUniqueReferralCode(currentReferral, id);
+  await ensureReferralRecord(nextReferral, id);
   if (next !== current || nextReferral !== currentReferral) {
     await rawWriteDocument("customers", id, { primeMemberId: next, referralCode: nextReferral, updatedAt: Date.now() }, true);
     if (next !== current) await notifyMidMigration(String(telegramUserId || customer.telegramUserId || id), next);
@@ -114,6 +132,7 @@ export async function repairCustomerPrimeRecord(customer: any): Promise<any> {
   if (!id) return customer;
   const repairedMid = await ensureCustomerPrimeMemberId(id, String(customer?.telegramUserId || id), customer);
   const referralCode = await ensureUniqueReferralCode(customer?.referralCode, id);
+  await ensureReferralRecord(referralCode, id);
   return { ...customer, primeMemberId: repairedMid || customer?.primeMemberId, referralCode, updatedAt: Date.now() };
 }
 
@@ -139,6 +158,7 @@ firestoreService.setDocument = async (collection: string, id: string, data: Reco
   const suppliedReferral = String(incoming.referralCode || "").trim().toUpperCase();
   incoming.primeMemberId = existing ? await ensureUniquePrimeMemberId(existing.primeMemberId || suppliedMid, id) : await ensureUniquePrimeMemberId(suppliedMid, id);
   incoming.referralCode = existing ? await ensureUniqueReferralCode(existing.referralCode || suppliedReferral, id) : await ensureUniqueReferralCode(suppliedReferral, id);
+  await ensureReferralRecord(incoming.referralCode, String(existing?.telegramUserId || id));
   return rawWriteDocument(collection, id, incoming, merge);
 };
 
@@ -150,7 +170,10 @@ export async function selfHealPrimeMemberIds(): Promise<void> {
     for (const customer of customers) {
       const beforeMid = String(customer?.primeMemberId || "").toUpperCase();
       const beforeReferral = String(customer?.referralCode || "").toUpperCase();
-      if (isValidPrimeMemberId(beforeMid) && isValidReferralCode(beforeReferral)) continue;
+      if (isValidPrimeMemberId(beforeMid) && isValidReferralCode(beforeReferral)) {
+        await ensureReferralRecord(beforeReferral, String(customer?.telegramUserId || customer?.id));
+        continue;
+      }
       await repairCustomerPrimeRecord(customer);
       repairedCount += 1;
     }
