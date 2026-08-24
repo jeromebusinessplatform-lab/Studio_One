@@ -5,20 +5,27 @@ function textOf(element: Element | null) {
   return String(element?.textContent || "").replace(/\s+/g, " ").trim();
 }
 
-function normalizeCourierGrid() {
-  const headings = Array.from(document.querySelectorAll("p, h2, h3, div, span"));
-  const heading = headings.find((node) => textOf(node) === "DELIVERY PROVIDER");
-  if (!heading) return;
+function findCourierGrid() {
+  const nodes = Array.from(document.querySelectorAll("p, h2, h3, div, span"));
+  const heading = nodes.find((node) => textOf(node) === "DELIVERY PROVIDER");
+  if (!heading) return null;
 
-  const card = heading.closest("section, form, div");
-  if (!card) return;
-  const grid = Array.from(card.querySelectorAll("div.grid")).find((candidate) => candidate.querySelectorAll("button img").length >= 2);
+  let current: Element | null = heading;
+  for (let depth = 0; current && depth < 8; depth += 1, current = current.parentElement) {
+    const grid = Array.from(current.querySelectorAll("div.grid")).find((candidate) => candidate.querySelectorAll("button img").length >= 2);
+    if (grid) return grid as HTMLElement;
+  }
+  return null;
+}
+
+function normalizeCourierGrid() {
+  const grid = findCourierGrid();
   if (!grid) return;
 
   grid.setAttribute("data-prime-courier-grid", "true");
-  (grid as HTMLElement).style.display = "grid";
-  (grid as HTMLElement).style.gridTemplateColumns = "repeat(3, minmax(0, 1fr))";
-  (grid as HTMLElement).style.gap = "10px";
+  grid.style.display = "grid";
+  grid.style.gridTemplateColumns = "repeat(3, minmax(0, 1fr))";
+  grid.style.gap = "10px";
 
   Array.from(grid.querySelectorAll("button")).forEach((button) => {
     const el = button as HTMLElement;
