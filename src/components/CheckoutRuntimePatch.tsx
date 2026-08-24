@@ -45,8 +45,8 @@ function hydratePrimeMid() {
   void fetch(`/api/customers?userId=${encodeURIComponent(uid)}&_t=${Date.now()}`, { credentials: "same-origin", cache: "no-store" })
     .then((response) => response.json().catch(() => ({})))
     .then((data) => {
-      const mid = data?.customers?.[0]?.primeMemberId;
-      if (!mid) return;
+      const mid = String(data?.customers?.[0]?.primeMemberId || "").trim().toUpperCase();
+      if (!/^[A-Z0-9]{10}$/.test(mid)) return;
       const label = Array.from(document.querySelectorAll("span")).find((node) => node.textContent?.trim() === "PRIME MID");
       const input = label?.parentElement?.querySelector("input") as HTMLInputElement | null;
       if (input && input.value !== mid) {
@@ -65,12 +65,23 @@ export default function CheckoutRuntimePatch() {
     if (location.pathname !== "/shop/checkout") return;
     let disposed = false;
 
-    // Checkout coupon/referral inputs are React-controlled fields. This helper deliberately
-    // does not intercept clicks, keyboard events, submits, or window.fetch calls.
     const onInput = (event: Event) => {
       if (disposed) return;
       const input = event.target as HTMLInputElement | null;
       if (input instanceof HTMLInputElement) saveCheckoutCode(input);
+    };
+
+    const onPrimeMidClick = (event: Event) => {
+      const target = event.target as HTMLElement | null;
+      const input = target?.closest("input") as HTMLInputElement | null;
+      if (!input || !input.disabled) return;
+      const label = input.parentElement?.querySelector("span")?.textContent?.trim();
+      if (label !== "PRIME MID") return;
+      const mid = input.value.trim().toUpperCase();
+      if (!/^[A-Z0-9]{10}$/.test(mid)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      window.dispatchEvent(new CustomEvent("prime:open-member", { detail: { primeMemberId: mid } }));
     };
 
     const observer = new MutationObserver(() => {
@@ -82,6 +93,7 @@ export default function CheckoutRuntimePatch() {
 
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     document.addEventListener("input", onInput, true);
+    document.addEventListener("click", onPrimeMidClick, true);
     const timer = window.setInterval(() => {
       applyDeliveryLabels();
       applySuccessButton();
@@ -106,6 +118,7 @@ export default function CheckoutRuntimePatch() {
       disposed = true;
       observer.disconnect();
       document.removeEventListener("input", onInput, true);
+      document.removeEventListener("click", onPrimeMidClick, true);
       window.clearInterval(timer);
       document.removeEventListener("click", successHandler, true);
     };
