@@ -22,7 +22,6 @@ export function isValidPrimeMemberId(value: unknown): value is string {
 const rawGetDocument = firestoreService.getDocument.bind(firestoreService);
 const rawGetDocuments = firestoreService.getDocuments.bind(firestoreService);
 const rawSetDocument = firestoreService.setDocument.bind(firestoreService);
-const rawUpdateDocument = firestoreService.updateDocument.bind(firestoreService);
 const rawAddDocument = firestoreService.addDocument.bind(firestoreService);
 
 export async function ensureUniquePrimeMemberId(candidate: unknown, customerId: string): Promise<string> {
@@ -65,7 +64,7 @@ export async function ensureCustomerPrimeMemberId(customerId: string, telegramUs
   if (isValidPrimeMemberId(current)) return current;
 
   const next = await ensureUniquePrimeMemberId(current, id);
-  await rawUpdateDocument("customers", id, { primeMemberId: next, updatedAt: Date.now() });
+  await rawSetDocument("customers", id, { primeMemberId: next, updatedAt: Date.now() }, true);
   await notifyMidMigration(String(telegramUserId || customer.telegramUserId || id), next);
   return next;
 }
@@ -93,17 +92,6 @@ firestoreService.getDocuments = async (collection: string, forceRefresh = false)
   const repaired: any[] = [];
   for (const customer of documents) repaired.push(await repairCustomerPrimeRecord(customer));
   return repaired;
-};
-
-firestoreService.setDocument = async (collection: string, id: string, data: any, merge = true) => {
-  if (collection === "customers") {
-    const candidate = String(data?.primeMemberId || "").trim().toUpperCase();
-    if (!isValidPrimeMemberId(candidate)) {
-      const used = new Set((await rawGetDocuments("customers")).map((customer: any) => String(customer.primeMemberId || "").toUpperCase()).filter((value) => isValidPrimeMemberId(value)));
-      data = { ...data, primeMemberId: generatePrimeMemberId(used) };
-    }
-  }
-  return rawSetDocument(collection, id, data, merge);
 };
 
 export async function selfHealPrimeMemberIds(): Promise<void> {
