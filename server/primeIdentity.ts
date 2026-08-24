@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { firestoreService } from "./firestoreService.js";
 
 const MID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-const MIGRATION_ID = "prime-mid-v6-read-write-boundary-self-healing";
+const MIGRATION_ID = "prime-mid-v7-random-10-char-no-legacy-pc";
 let migrationPromise: Promise<void> | null = null;
 
 export function generatePrimeMemberId(used = new Set<string>()): string {
@@ -15,8 +15,13 @@ export function generatePrimeMemberId(used = new Set<string>()): string {
   throw new Error("Unable to generate a unique PRIME MID");
 }
 
+export function isLegacyPrimeMemberId(value: unknown): value is string {
+  return typeof value === "string" && /^PC/i.test(value.trim());
+}
+
 export function isValidPrimeMemberId(value: unknown): value is string {
-  return typeof value === "string" && /^[A-Z0-9]{10}$/.test(value);
+  const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return /^[A-Z0-9]{10}$/.test(normalized) && !isLegacyPrimeMemberId(normalized);
 }
 
 const rawGetDocument = firestoreService.getDocument.bind(firestoreService);
@@ -48,7 +53,7 @@ async function notifyMidMigration(telegramUserId: string, mid: string) {
   const exists = notifications.some((n: any) =>
     String(n.telegramUserId) === telegramUserId &&
     String(n.type) === "account" &&
-    String(n.migrationVersion || "") === "v6" &&
+    String(n.migrationVersion || "") === "v7" &&
     String(n.message || "").includes(mid),
   );
   if (exists) return;
@@ -60,7 +65,7 @@ async function notifyMidMigration(telegramUserId: string, mid: string) {
     iconName: "ShieldAlert",
     color: "#2563eb",
     read: false,
-    migrationVersion: "v6",
+    migrationVersion: "v7",
     createdAt: Date.now(),
   });
 }
@@ -104,7 +109,7 @@ firestoreService.getDocuments = async (collection: string, forceRefresh = false)
 };
 
 // Writes are also guarded. This is critical because Telegram authentication runs on every
-// app open and previously wrote PC{telegramId} back into Firestore after migration.
+// app open and must never be able to persist a legacy PC-prefixed MID again.
 firestoreService.setDocument = async (collection: string, id: string, data: Record<string, any>, merge = true) => {
   if (collection !== "customers") return rawWriteDocument(collection, id, data, merge);
   const existing = await rawGetDocument("customers", id);
@@ -133,7 +138,7 @@ export async function selfHealPrimeMemberIds(): Promise<void> {
       completedAt: Date.now(),
       customerCount: customers.length,
       migratedCount,
-      version: 6,
+      version: 7,
     }, false);
   })().catch((error) => {
     migrationPromise = null;
