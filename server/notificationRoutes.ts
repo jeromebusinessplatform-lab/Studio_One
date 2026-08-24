@@ -37,18 +37,8 @@ export function installNotificationRoutes(app: Application) {
         .filter((n: any) => !telegramUserId || String(n.telegramUserId) === telegramUserId || !n.telegramUserId)
         .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 
-      if (userList.length === 0 && telegramUserId) {
-        const welcome = await createNotification({
-          telegramUserId,
-          title: "Welcome to PRIME Commerce",
-          message: "Your secured Telegram handshake and membership profile have been activated successfully.",
-          type: "system",
-          iconName: "ShieldAlert",
-          color: "#16a34a",
-        });
-        userList.unshift(welcome);
-      }
-
+      // Reading notifications must be side-effect free. Account activation belongs to
+      // the authentication/profile lifecycle, not to every notifications-page refresh.
       return res.json({ notifications: userList });
     } catch (error) {
       console.error("Get notifications error:", error);
