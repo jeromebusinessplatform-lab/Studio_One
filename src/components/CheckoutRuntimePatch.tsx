@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useTelegram } from "@/context/TelegramContext.tsx";
 
 const CODE_STORAGE_KEY = "prime_checkout_codes_v2";
 
@@ -38,10 +39,18 @@ function applySuccessButton() {
   else button.textContent = "GO TO MY ORDERS";
 }
 
-function hydratePrimeMid() {
+function setPrimeMidValue(mid: string) {
+  const normalized = String(mid || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{10}$/.test(normalized) || /^PC[A-Z0-9]{8}$/.test(normalized)) return;
   const label = Array.from(document.querySelectorAll("span, div, label")).find((node) => node.textContent?.trim() === "PRIME MID");
   const input = label?.parentElement?.querySelector("input") as HTMLInputElement | null;
-  if (!input) return;
+  if (!input || input.value === normalized) return;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  setter?.call(input, normalized);
+}
+
+function hydratePrimeMid(hydratedMid?: string) {
+  if (hydratedMid) setPrimeMidValue(hydratedMid);
 
   void fetch("/api/account/identity", { credentials: "same-origin", cache: "no-store" })
     .then(async (response) => {
@@ -49,13 +58,7 @@ function hydratePrimeMid() {
       if (!response.ok) throw new Error(data.error || "Unable to hydrate PRIME Member ID");
       return String(data.primeMemberId || "").trim().toUpperCase();
     })
-    .then((mid) => {
-      if (!/^[A-Z0-9]{10}$/.test(mid) || /^PC[A-Z0-9]{8}$/.test(mid)) return;
-      if (input.value !== mid) {
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-        setter?.call(input, mid);
-      }
-    })
+    .then((mid) => setPrimeMidValue(mid))
     .catch(() => {});
 }
 
@@ -95,6 +98,7 @@ function validateReferralInput(input: HTMLInputElement) {
 export default function CheckoutRuntimePatch() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { customer } = useTelegram();
 
   useEffect(() => {
     if (location.pathname !== "/shop/checkout") return;
@@ -131,7 +135,7 @@ export default function CheckoutRuntimePatch() {
       if (disposed) return;
       applyDeliveryLabels();
       applySuccessButton();
-      hydratePrimeMid();
+      hydratePrimeMid(customer?.primeMemberId);
     });
 
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
@@ -140,7 +144,7 @@ export default function CheckoutRuntimePatch() {
     const timer = window.setInterval(() => {
       applyDeliveryLabels();
       applySuccessButton();
-      hydratePrimeMid();
+      hydratePrimeMid(customer?.primeMemberId);
     }, 1000);
 
     const successHandler = (event: Event) => {
@@ -155,7 +159,7 @@ export default function CheckoutRuntimePatch() {
 
     applyDeliveryLabels();
     applySuccessButton();
-    hydratePrimeMid();
+    hydratePrimeMid(customer?.primeMemberId);
 
     return () => {
       disposed = true;
@@ -165,7 +169,7 @@ export default function CheckoutRuntimePatch() {
       window.clearInterval(timer);
       document.removeEventListener("click", successHandler, true);
     };
-  }, [location.pathname, navigate]);
+  }, [location.pathname, navigate, customer?.primeMemberId]);
 
   return null;
 }
