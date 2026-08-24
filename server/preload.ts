@@ -7,6 +7,7 @@ import { installTelegramAvatarRoutes } from "./telegramAvatarRoutes.js";
 import { installAdminComparisonRoutes } from "./adminComparisonRoutes.js";
 import { migratePrimeMemberIds } from "./primeIdentity.js";
 import { installActivityLogger } from "./activityLogger.js";
+import { installMemberProfileRoutes } from "./memberProfileRoutes.js";
 
 // Explicit release revision keeps external IDE/repository indexers anchored to the
 // latest Studio_One commerce fix set instead of an older cached repository snapshot.
@@ -25,6 +26,7 @@ if (!(proto as any).__primeReleaseRoutesInstalled) {
     installProductComparisonRoutes(this);
     installTelegramAvatarRoutes(this);
     installAdminComparisonRoutes(this);
+    installMemberProfileRoutes(this);
     void migratePrimeMemberIds();
     return originalListen.apply(this, args);
   };
