@@ -99,6 +99,21 @@ export function installMemberProfileRoutes(app: Application) {
     }
   });
 
+  app.get("/api/account/identity", async (req, res) => {
+    const viewerId = telegramUserId(req);
+    if (!viewerId) return res.status(401).json({ error: "Telegram authentication required" });
+    try {
+      const customer = await firestoreService.getDocument("customers", viewerId);
+      if (!customer) return res.status(404).json({ error: "PRIME Member record not found" });
+      const primeMemberId = String(customer.primeMemberId || "").trim().toUpperCase();
+      if (!isPublicPrimeMemberId(primeMemberId)) return res.status(409).json({ error: "PRIME Member ID is not ready" });
+      return res.json({ primeMemberId });
+    } catch (error) {
+      console.error("Account identity lookup error:", error);
+      return res.status(500).json({ error: "Unable to load PRIME Member ID" });
+    }
+  });
+
   app.get("/api/account/referrer", async (req, res) => {
     const viewerId = telegramUserId(req);
     if (!viewerId) return res.status(401).json({ error: "Telegram authentication required" });
@@ -110,6 +125,29 @@ export function installMemberProfileRoutes(app: Application) {
     } catch (error) {
       console.error("Account referrer lookup error:", error);
       return res.status(500).json({ error: "Unable to load referrer" });
+    }
+  });
+
+  app.get("/api/account/referrals", async (req, res) => {
+    const viewerId = telegramUserId(req);
+    if (!viewerId) return res.status(401).json({ error: "Telegram authentication required" });
+    try {
+      const customers = await firestoreService.getDocuments("customers");
+      const customer = customers.find((entry: any) => String(entry.telegramUserId || entry.id) === viewerId);
+      if (!customer) return res.status(404).json({ referrals: [] });
+      const refereeIds = Array.isArray(customer.referees) ? customer.referees.map((id: any) => String(id).trim()).filter(Boolean) : [];
+      const referrals = refereeIds
+        .map((id) => customers.find((entry: any) => String(entry.telegramUserId || entry.id) === id))
+        .filter(Boolean)
+        .map((referee: any) => {
+          const primeMemberId = String(referee.primeMemberId || "").trim().toUpperCase();
+          return isPublicPrimeMemberId(primeMemberId) ? buildPublicMember(referee, primeMemberId) : null;
+        })
+        .filter(Boolean);
+      return res.json({ referrals, count: referrals.length });
+    } catch (error) {
+      console.error("Account referrals lookup error:", error);
+      return res.status(500).json({ error: "Unable to load referrals" });
     }
   });
 
