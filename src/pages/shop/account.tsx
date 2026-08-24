@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useTelegram } from "@/context/TelegramContext.tsx";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
-import { User, Pencil, ShoppingBag } from "lucide-react";
+import { User, Pencil } from "lucide-react";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "sonner";
@@ -102,11 +102,6 @@ export default function AccountPage() {
           <div className="flex justify-between"><span>Referrals Made:</span><span className="font-bold">{customerData.referrals || customerData.referees?.length || 0}</span></div>
           {customerData.referredBy && <div className="flex justify-between text-xs text-neutral-500 pt-1 border-t"><span>Referred By:</span><span className="font-mono">{customerData.referredBy}</span></div>}
         </div>
-
-        <Link to="/shop/orders" className="bg-black text-white rounded-2xl p-4 shadow-sm flex items-center justify-between hover:bg-neutral-800 transition">
-          <span className="flex items-center gap-2 text-sm font-bold uppercase"><ShoppingBag size={17} /> MY ORDERS ({hydratedOrderCount})</span>
-          <span className="text-xs">VIEW ORDERS →</span>
-        </Link>
 
         <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm">
           <h2 className="font-bold mb-3 text-sm flex items-center justify-between"><span>APPLIED DISCOUNTS & PROMOS</span><span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-normal">{(customerData.appliedDiscounts || []).length} used</span></h2>
