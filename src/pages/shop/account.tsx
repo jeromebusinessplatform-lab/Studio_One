@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useTelegram } from "@/context/TelegramContext.tsx";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
-import { User, Pencil, UserRound } from "lucide-react";
+import { User, Pencil, UserRound, Copy, Check } from "lucide-react";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ export default function AccountPage() {
   const { orders } = useOrders(customer?.telegramUserId);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [referrer, setReferrer] = useState<Referrer | null>(null);
+  const [midCopied, setMidCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -42,6 +43,25 @@ export default function AccountPage() {
       .then((data) => setReferrer(data))
       .catch(() => setReferrer(null));
   }, [isAuthenticated, customer?.telegramUserId]);
+
+  const handleCopyMid = async () => {
+    const mid = String(customerData.primeMemberId || "").trim();
+    if (!mid || mid === "—") return;
+    try {
+      await navigator.clipboard.writeText(mid);
+    } catch {
+      const textArea = document.createElement("textarea");
+      textArea.value = mid;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+    }
+    setMidCopied(true);
+    window.setTimeout(() => setMidCopied(false), 1400);
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -109,17 +129,17 @@ export default function AccountPage() {
           <div className="text-lg font-bold">{customerData.telegramDisplayName}</div>
           <div className="text-neutral-500 text-sm mb-4">{customerData.telegramUsername ? `@${customerData.telegramUsername}` : "Telegram Customer"}</div>
           <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-          <div className="grid grid-cols-2 gap-4 mt-2 text-xs text-left"><div className="border p-2 rounded"><div className="text-neutral-500">TELEGRAM UID</div><div>{customerData.telegramUserId}</div></div><div className="border p-2 rounded"><div className="text-neutral-500">PRIME MEMBER ID</div><PrimeMemberLink primeMemberId={customerData.primeMemberId} className="text-neutral-900 font-bold" /></div></div>
+          <div className="grid grid-cols-2 gap-4 mt-2 text-xs text-left"><div className="border p-2 rounded"><div className="text-neutral-500">TELEGRAM UID</div><div className="font-critical-data">{customerData.telegramUserId}</div></div><div className="border p-2 rounded"><div className="text-neutral-500">PRIME MEMBER ID</div><div className="flex items-center gap-1.5"><PrimeMemberLink primeMemberId={customerData.primeMemberId} className="text-neutral-900 font-bold no-underline hover:no-underline" /><button type="button" onClick={handleCopyMid} title="Copy PRIME Member ID" aria-label="Copy PRIME Member ID" className="inline-flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors">{midCopied ? <Check size={13} /> : <Copy size={13} />}</button></div></div></div>
         </div>
 
         <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm space-y-2 text-sm">
           <div className="flex justify-between"><span>VIP Tier Status:</span><span className="font-bold">{customerData.vipTier}</span></div>
-          <div className="flex justify-between"><span>Points:</span><span className="font-bold">{customerData.points}</span></div>
-          <div className="flex justify-between"><span>Member since:</span><span className="font-bold">{new Date(customerData.memberSince || Date.now()).toLocaleDateString()}</span></div>
-          <div className="flex justify-between"><span>Order Count:</span><span className="font-bold">{hydratedOrderCount}</span></div>
-          <div className="flex justify-between"><span>Total Spending:</span><span className="font-bold">₱{(customerData.totalSpending || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-          <div className="flex justify-between"><span>Total Discounts Saved:</span><span className="font-bold text-emerald-600">₱{(customerData.totalDiscounts || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-          <div className="flex justify-between"><span>Referrals Made:</span><span className="font-bold">{customerData.referrals || customerData.referees?.length || 0}</span></div>
+          <div className="flex justify-between"><span>Points:</span><span className="font-critical-data font-bold">{customerData.points}</span></div>
+          <div className="flex justify-between"><span>Member since:</span><span className="font-critical-data font-bold">{new Date(customerData.memberSince || Date.now()).toLocaleDateString()}</span></div>
+          <div className="flex justify-between"><span>Order Count:</span><span className="font-critical-data font-bold">{hydratedOrderCount}</span></div>
+          <div className="flex justify-between"><span>Total Spending:</span><span className="font-critical-data font-bold">₱{(customerData.totalSpending || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+          <div className="flex justify-between"><span>Total Discounts Saved:</span><span className="font-critical-data font-bold text-emerald-600">₱{(customerData.totalDiscounts || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+          <div className="flex justify-between"><span>Referrals Made:</span><span className="font-critical-data font-bold">{customerData.referrals || customerData.referees?.length || 0}</span></div>
         </div>
 
         {referrer && (
@@ -127,7 +147,7 @@ export default function AccountPage() {
             <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-neutral-500 mb-3 flex items-center gap-2"><UserRound size={14} /> Referred By</div>
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0"><div className="font-bold text-sm truncate">{referrer.telegramDisplayName}</div><div className="text-[11px] text-neutral-500 truncate">{referrer.telegramUsername ? `@${referrer.telegramUsername}` : "Telegram handle not set"} • {referrer.vipTier}</div></div>
-              <PrimeMemberLink primeMemberId={referrer.primeMemberId} className="text-xs" />
+              <PrimeMemberLink primeMemberId={referrer.primeMemberId} className="text-xs no-underline hover:no-underline" />
             </div>
           </div>
         )}
@@ -136,13 +156,13 @@ export default function AccountPage() {
           <h2 className="font-bold mb-3 text-sm flex items-center justify-between"><span>APPLIED DISCOUNTS & PROMOS</span><span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-normal">{(customerData.appliedDiscounts || []).length} used</span></h2>
           <div className="space-y-2">
             {(customerData.appliedDiscounts || []).map((disc: any, idx: number) => (
-              <div key={idx} className="flex justify-between items-center text-xs border-b border-neutral-100 pb-2"><div><div className="font-bold text-black uppercase">{disc.code}</div><div className="text-[10px] text-neutral-400">Order #{disc.orderNumber} • {new Date(disc.date).toLocaleDateString()}</div></div><div className="font-bold text-emerald-600">-₱{(disc.amountSaved || 0).toFixed(2)}</div></div>
+              <div key={idx} className="flex justify-between items-center text-xs border-b border-neutral-100 pb-2"><div><div className="font-bold text-black uppercase">{disc.code}</div><div className="text-[10px] text-neutral-400">Order #{disc.orderNumber} • {new Date(disc.date).toLocaleDateString()}</div></div><div className="font-critical-data font-bold text-emerald-600">-₱{(disc.amountSaved || 0).toFixed(2)}</div></div>
             ))}
             {!(customerData.appliedDiscounts || []).length && <div className="text-xs text-neutral-500 text-center py-3">No promo codes or discounts applied yet.</div>}
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm"><h2 className="font-bold mb-3 text-sm">RECENT ORDERS</h2><div className="space-y-2">{orders.slice(0, 5).map((order) => <div key={order._id} className="flex justify-between text-xs border-b pb-2"><div>{order.orderNumber}</div><div>{order.orderStatus}</div><PrimeMemberLink primeMemberId={order.primeMemberId} className="text-neutral-700" /></div>)}{!orders.length && <div className="text-xs text-neutral-500">No orders yet.</div>}</div></div>
+        <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm"><h2 className="font-bold mb-3 text-sm">RECENT ORDERS</h2><div className="space-y-2">{orders.slice(0, 5).map((order) => <div key={order._id} className="flex justify-between text-xs border-b pb-2"><div className="font-critical-data">{order.orderNumber}</div><div>{order.orderStatus}</div><PrimeMemberLink primeMemberId={order.primeMemberId} className="text-neutral-700 no-underline hover:no-underline" /></div>)}{!orders.length && <div className="text-xs text-neutral-500">No orders yet.</div>}</div></div>
       </div>
     </div>
   );
