@@ -33,10 +33,8 @@ function asList(value: unknown): string[] {
 function inSchedule(campaign: any, now: number) {
   if (campaign.startAt && now < Date.parse(String(campaign.startAt))) return false;
   if (campaign.endAt && now >= Date.parse(String(campaign.endAt))) return false;
-
   const date = new Date(now);
   if (Array.isArray(campaign.daysOfWeek) && campaign.daysOfWeek.length > 0 && !campaign.daysOfWeek.includes(date.getDay())) return false;
-
   const start = campaign.startTimeOfDay ? String(campaign.startTimeOfDay) : null;
   const end = campaign.endTimeOfDay ? String(campaign.endTimeOfDay) : null;
   if (start || end) {
@@ -50,8 +48,7 @@ function inSchedule(campaign: any, now: number) {
 }
 
 async function resolveCampaign() {
-  const configured = await firestoreService.getDocument("referralCampaigns", DEFAULT_CAMPAIGN_ID);
-  return configured || {
+  return (await firestoreService.getDocument("referralCampaigns", DEFAULT_CAMPAIGN_ID)) || {
     id: DEFAULT_CAMPAIGN_ID,
     active: true,
     maxUses: null,
@@ -78,20 +75,20 @@ export async function validateReferral(context: ReferralValidationContext): Prom
   if (String(referrer.id) === refereeId || String(referrer.telegramUserId) === refereeId) return { valid: false, code, campaignId: campaign.id, reason: "Self-referral is not permitted." };
 
   const referee = customerRecords.find((customer: any) => String(customer.id) === refereeId || String(customer.telegramUserId) === refereeId);
-  // Referral entry is allowed only for a truly new customer. Existing/historical customer records are not eligible.
-  if (referee) return { valid: false, code, campaignId: campaign.id, reason: "Referral codes are available to first-time customers only." };
+  if (referee) {
+    const orderCount = numeric(referee.orderCount, 0);
+    const hasHistory = orderCount > 0 || numeric(referee.totalSpending, 0) > 0 || Boolean(referee.firstOrderAt) || Boolean(referee.referredBy);
+    if (hasHistory) return { valid: false, code, campaignId: campaign.id, reason: "Referral codes are available only to first-time customers." };
+  }
 
   const status = String(referrer.accountStatus || referrer.status || "active").toLowerCase();
-  if (["banned", "suspended", "inactive", "disabled"].includes(status) || referrer.isActive === false) {
-    return { valid: false, code, campaignId: campaign.id, reason: "The referring member is not in good standing." };
-  }
+  if (["banned", "suspended", "inactive", "disabled"].includes(status) || referrer.isActive === false) return { valid: false, code, campaignId: campaign.id, reason: "The referring member is not in good standing." };
 
   const referrals = await firestoreService.getDocuments("referrals");
   const existingForReferee = referrals.find((entry: any) => String(entry.refereeId || entry.telegramUserId || "") === refereeId);
   if (existingForReferee) return { valid: false, code, campaignId: campaign.id, reason: "This account has already used a referral code." };
 
-  const campaignRedemptions = referrals.filter((entry: any) => String(entry.campaignId || DEFAULT_CAMPAIGN_ID) === String(campaign.id));
-  const codeRedemptions = campaignRedemptions.filter((entry: any) => String(entry.code || "").toUpperCase() === code);
+  const codeRedemptions = referrals.filter((entry: any) => String(entry.campaignId || DEFAULT_CAMPAIGN_ID) === String(campaign.id) && String(entry.code || "").toUpperCase() === code);
   const maxUses = campaign.maxUses == null ? null : numeric(campaign.maxUses, 0);
   if (maxUses !== null && maxUses > 0 && codeRedemptions.length >= maxUses) return { valid: false, code, campaignId: campaign.id, reason: "This referral code has reached its usage limit." };
 
@@ -99,13 +96,9 @@ export async function validateReferral(context: ReferralValidationContext): Prom
   if (numeric(context.orderAmount, 0) < minSpend) return { valid: false, code, campaignId: campaign.id, reason: `A minimum qualifying order of PHP ${minSpend.toFixed(2)} is required.` };
 
   const allowedRegions = asList(campaign.allowedRegions || campaign.regions);
-  if (allowedRegions.length > 0 && !allowedRegions.includes(String(context.region || "").trim().toUpperCase())) {
-    return { valid: false, code, campaignId: campaign.id, reason: "This referral campaign is not available in your region." };
-  }
+  if (allowedRegions.length > 0 && !allowedRegions.includes(String(context.region || "").trim().toUpperCase())) return { valid: false, code, campaignId: campaign.id, reason: "This referral campaign is not available in your region." };
   const allowedChannels = asList(campaign.allowedChannels || campaign.channels);
-  if (allowedChannels.length > 0 && !allowedChannels.includes(String(context.channel || "").trim().toUpperCase())) {
-    return { valid: false, code, campaignId: campaign.id, reason: "This referral campaign is not available through this channel." };
-  }
+  if (allowedChannels.length > 0 && !allowedChannels.includes(String(context.channel || "").trim().toUpperCase())) return { valid: false, code, campaignId: campaign.id, reason: "This referral campaign is not available through this channel." };
 
   return {
     valid: true,
