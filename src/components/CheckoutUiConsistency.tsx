@@ -82,14 +82,35 @@ function normalizeCourierGrid() {
   });
 }
 
-function hideLegacyDeliveryDueNow() {
-  const nodes = Array.from(document.querySelectorAll("span, div, p"));
-  const label = nodes.find((node) => textOf(node) === "Delivery Due Now");
+function selectedDeliveryType(grid: HTMLElement | null) {
+  if (!grid) return "";
+  const selected = Array.from(grid.querySelectorAll("button")).find((button) => {
+    const className = String((button as HTMLElement).className || "");
+    return className.includes("border-black") || className.includes("ring-black");
+  });
+  if (!selected) return "";
+
+  const tier = selected.querySelector(".relative.z-10 span:first-child");
+  const value = textOf(tier).toUpperCase();
+  return value === "STANDARD" || value === "EXPRESS" || value === "PRIORITY" ? value : "";
+}
+
+function updateDeliveryFeeLabel() {
+  const grid = findCourierGrid();
+  const labelNodes = Array.from(document.querySelectorAll("span, div, p"));
+  const label = labelNodes.find((node) => {
+    const value = textOf(node).toUpperCase();
+    return value === "DELIVERY DUE NOW" || /^(STANDARD|EXPRESS|PRIORITY) DELIVERY FEE$/.test(value);
+  });
   if (!label) return;
+
   const row = label.closest("div.flex.justify-between") || label.parentElement;
   if (!row) return;
-  (row as HTMLElement).style.display = "none";
-  row.setAttribute("data-prime-delivery-due-hidden", "true");
+  (row as HTMLElement).style.display = "flex";
+  row.removeAttribute("data-prime-delivery-due-hidden");
+
+  const type = selectedDeliveryType(grid);
+  label.textContent = type ? `${type} DELIVERY FEE` : "DELIVERY FEE";
 }
 
 function alignCodeFields() {
@@ -113,9 +134,9 @@ export default function CheckoutUiConsistency() {
     let disposed = false;
     const apply = () => {
       if (disposed) return;
-      hideLegacyDeliveryDueNow();
       alignCodeFields();
       normalizeCourierGrid();
+      updateDeliveryFeeLabel();
     };
 
     requestAnimationFrame(apply);
