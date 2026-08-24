@@ -5,7 +5,7 @@ export type OrderStatus = "REVIEW" | "PAYMENT_CONFIRMED" | "START_PACKING" | "RE
 export type PaymentStatus = "PENDING" | "CONFIRMED" | "FAILED" | "CLEARED";
 export type DeliveryPaymentOption = "PAY_AT_CHECKOUT" | "PAY_UPON_FULFILLMENT";
 export interface OrderItem { productId: string; productName: string; quantity: number; unitPrice: number; subtotal: number; }
-export interface CustomerOrder { _id: string; orderNumber: string; _creationTime: number; telegramUserId?: string; telegramDisplayName?: string; telegramUsername?: string; primeMemberId?: string; items: OrderItem[]; total: number; subtotal: number; discount: number; deliveryFee: number; charges?: number; tax?: number; deliveryDueNow?: number; fulfillmentTotal?: number; receiverName: string; contactNumber: string; deliveryAddress: string; courierName: string; deliveryProviderId?: string; deliveryCharge?: number; deliveryPaymentMethod?: DeliveryPaymentOption; paymentMethodName: string; paymentStatus: PaymentStatus; orderStatus: OrderStatus; queuePosition: number; estimatedWaitingMinutes: number; estimatedDispatchTime: string; adminNotes?: string; receiptUrl?: string; receiptOcrData?: ReceiptOcrResult; deliveryPaymentOption?: DeliveryPaymentOption; distanceKm?: number; }
+export interface CustomerOrder { _id: string; orderNumber: string; _creationTime: number; telegramUserId?: string; telegramDisplayName?: string; telegramUsername?: string; primeMemberId?: string; items: OrderItem[]; total: number; subtotal: number; discount: number; deliveryFee: number; charges?: number; tax?: number; deliveryDueNow?: number; fulfillmentTotal?: number; receiverName: string; contactNumber: string; deliveryAddress: string; courierName: string; deliveryProviderId?: string; deliveryCharge?: number; deliveryPaymentMethod: string | DeliveryPaymentOption; paymentMethodName: string; paymentStatus: PaymentStatus; orderStatus: OrderStatus; queuePosition: number; estimatedWaitingMinutes: number; estimatedDispatchTime: string; adminNotes?: string; receiptUrl?: string; receiptOcrData?: ReceiptOcrResult; deliveryPaymentOption?: DeliveryPaymentOption; distanceKm?: number; }
 
 function fromApi(data: any): CustomerOrder {
   const createdAt = Number(data.createdAt || Date.now());
@@ -23,6 +23,16 @@ async function fetchOrders(telegramUserId?: string, forceSync = false) {
   if (!response.ok) throw new Error(data.error || "Unable to load orders");
   const list = Array.isArray(data.orders) ? data.orders.map(fromApi) : [];
   return { orders: list, syncedAt: data.syncedAt || Date.now() };
+}
+
+function withSavedCheckoutCodes(orderData: Record<string, any>) {
+  const next = { ...orderData };
+  try {
+    const saved = JSON.parse(sessionStorage.getItem("prime_checkout_codes_v2") || "{}");
+    if (!next.promoCode && typeof saved?.coupon === "string" && saved.coupon.trim()) next.promoCode = saved.coupon.trim().toUpperCase();
+    if (!next.referralCode && typeof saved?.referral === "string" && saved.referral.trim()) next.referralCode = saved.referral.trim().toUpperCase();
+  } catch {}
+  return next;
 }
 
 export function useOrders(telegramUserId?: string) {
@@ -68,7 +78,7 @@ export function useOrders(telegramUserId?: string) {
         cache: "no-store",
         signal: controller.signal,
         headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
-        body: JSON.stringify(orderData),
+        body: JSON.stringify(withSavedCheckoutCodes(orderData)),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Unable to create order");
