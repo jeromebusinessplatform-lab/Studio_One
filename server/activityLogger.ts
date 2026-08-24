@@ -1,7 +1,7 @@
 import { firestoreService } from "./firestoreService.js";
+import { ensureCustomerPrimeMemberId, isValidPrimeMemberId } from "./primeIdentity.js";
 
 const rawSetDocument = firestoreService.setDocument.bind(firestoreService);
-const rawUpdateDocument = firestoreService.updateDocument.bind(firestoreService);
 const rawAddDocument = firestoreService.addDocument.bind(firestoreService);
 
 let installed = false;
@@ -176,8 +176,28 @@ export function installActivityLogger() {
     if (activityWriteInProgress || !["customers", "orders"].includes(collection)) {
       return rawSetDocument(collection, id, data, merge);
     }
+
     const before = merge ? await firestoreService.getDocument(collection, id) : null;
-    const result = await rawSetDocument(collection, id, data, merge);
+    const payload = { ...data };
+
+    if (collection === "orders") {
+      const telegramUserId = text(payload.telegramUserId);
+      if (telegramUserId && !telegramUserId.startsWith("guest_")) {
+        try {
+          const customer = await firestoreService.getDocument("customers", telegramUserId);
+          const existingMid = text(customer?.primeMemberId).toUpperCase();
+          if (isValidPrimeMemberId(existingMid)) payload.primeMemberId = existingMid;
+          else {
+            const generatedMid = await ensureCustomerPrimeMemberId(telegramUserId, telegramUserId, customer || undefined);
+            if (generatedMid) payload.primeMemberId = generatedMid;
+          }
+        } catch (error) {
+          console.error("Unable to hydrate order PRIME Member ID:", error);
+        }
+      }
+    }
+
+    const result = await rawSetDocument(collection, id, payload, merge);
     const after = result || (await firestoreService.getDocument(collection, id));
 
     try {
