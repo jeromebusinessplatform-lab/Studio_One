@@ -38,6 +38,7 @@ import InstallPrompt from "./components/InstallPrompt.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import AdminCourierConfigPanel from "./components/AdminCourierConfigPanel.tsx";
 import PrimeMemberProfile from "./components/PrimeMemberProfile.tsx";
+import CheckoutUiConsistency from "./components/CheckoutUiConsistency.tsx";
 
 function AdminGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAdmin();
@@ -72,6 +73,7 @@ function AppShell() {
     <div className={`w-full min-h-[100dvh] flex flex-col justify-start overflow-x-hidden ${isAdmin ? "bg-white text-neutral-900" : "bg-[#f3f4f6] text-neutral-900"}`}>
       <div className="flex-1 w-full flex flex-col min-h-0">
         <AdminCourierConfigPanel />
+        <CheckoutUiConsistency />
         <Routes>
           <Route path="/" element={<Navigate to="/shop" replace />} />
           <Route path="/shop" element={<ShopLayout />}>
