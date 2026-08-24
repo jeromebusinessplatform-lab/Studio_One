@@ -39,6 +39,7 @@ import NotFound from "./pages/NotFound.tsx";
 import AdminCourierConfigPanel from "./components/AdminCourierConfigPanel.tsx";
 import PrimeMemberProfile from "./components/PrimeMemberProfile.tsx";
 import CheckoutUiConsistency from "./components/CheckoutUiConsistency.tsx";
+import OrderSuccessOverlay from "./components/OrderSuccessOverlay.tsx";
 
 function AdminGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAdmin();
@@ -109,6 +110,7 @@ function AppShell() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
+      <OrderSuccessOverlay />
       <PrimeMemberProfile />
       {isAdmin && <GlobalProprietaryFooter />}
     </div>
