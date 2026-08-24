@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { Application, Request, Response } from "express";
 import { firestoreService } from "./firestoreService.js";
 import { generateCouponCode, listCoupons, validateCouponDefinition } from "./couponEngine.js";
@@ -23,15 +24,11 @@ function isAdmin(req: Request) {
     const payload = Buffer.from(encoded, "base64url").toString("utf8");
     const match = payload.match(/^admin:(\d+)$/);
     if (!match || Number(match[1]) < Date.now()) return false;
-    const expected = awaitableHmac(payload, adminSecret());
+    const expected = crypto.createHmac("sha256", adminSecret()).update(payload).digest("hex");
     return signature === expected;
   } catch {
     return false;
   }
-}
-
-function awaitableHmac(payload: string, secret: string) {
-  return require("node:crypto").createHmac("sha256", secret).update(payload).digest("hex");
 }
 
 function requireAdmin(req: Request, res: Response): boolean {
@@ -48,10 +45,10 @@ export function installCouponAdminRoutes(app: Application) {
     try {
       const coupons = await listCoupons();
       const redemptions = await firestoreService.getDocuments("couponRedemptions");
-      const enriched = coupons.map((coupon) => {
-        const uses = redemptions.filter((entry: any) => String(entry.code).toUpperCase() === coupon.code).length;
-        return { ...coupon, usageCount: uses };
-      });
+      const enriched = coupons.map((coupon) => ({
+        ...coupon,
+        usageCount: redemptions.filter((entry: any) => String(entry.code).toUpperCase() === coupon.code).length,
+      }));
       return res.json({ coupons: enriched });
     } catch (error: any) {
       console.error("Coupon list error:", error);
