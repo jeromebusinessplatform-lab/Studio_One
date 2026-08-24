@@ -36,6 +36,7 @@ import InstallPrompt from "./components/InstallPrompt.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import CheckoutRuntimePatch from "./components/CheckoutRuntimePatch.tsx";
 import AdminCourierConfigPanel from "./components/AdminCourierConfigPanel.tsx";
+import PrimeMemberProfile from "./components/PrimeMemberProfile.tsx";
 
 function AdminGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAdmin();
@@ -105,6 +106,7 @@ function AppShell() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
+      <PrimeMemberProfile />
       {isAdmin && <GlobalProprietaryFooter />}
     </div>
   );
