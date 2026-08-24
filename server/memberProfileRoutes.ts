@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { Application } from "express";
 import { firestoreService } from "./firestoreService.js";
 
@@ -19,7 +20,6 @@ function telegramUserId(req: any): string | null {
     const payload = Buffer.from(encoded, "base64url").toString("utf8");
     const match = payload.match(/^telegram:(\d+):(\d+)$/);
     if (!match || Number(match[2]) < Date.now()) return null;
-    const crypto = require("node:crypto") as typeof import("node:crypto");
     const expected = crypto.createHmac("sha256", secret).update(payload).digest("hex");
     return expected === signature ? match[1] : null;
   } catch {
@@ -33,9 +33,7 @@ export function installMemberProfileRoutes(app: Application) {
     if (!viewerId) return res.status(401).json({ error: "Telegram authentication required" });
 
     const primeMemberId = String(req.params.primeMemberId || "").trim().toUpperCase();
-    if (!/^[A-Z0-9]{10}$/.test(primeMemberId)) {
-      return res.status(400).json({ error: "Invalid PRIME Member ID" });
-    }
+    if (!/^[A-Z0-9]{10}$/.test(primeMemberId)) return res.status(400).json({ error: "Invalid PRIME Member ID" });
 
     try {
       const customers = await firestoreService.getDocuments("customers");
