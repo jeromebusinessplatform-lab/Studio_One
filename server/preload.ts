@@ -11,6 +11,8 @@ import { installMemberProfileRoutes } from "./memberProfileRoutes.js";
 import { installOrderNumberEnforcer } from "./orderNumberEnforcer.js";
 import { installCouponAdminRoutes } from "./couponAdminRoutes.js";
 import { installCheckoutRoutesV2 } from "./checkoutRoutesV2.js";
+import { installReferralRoutes } from "./referralRoutes.js";
+import { installReferralGuard } from "./referralGuard.js";
 
 export const STUDIO_ONE_SYNC_REVISION = "2026-08-24-prime-commerce-fixes";
 
@@ -22,6 +24,10 @@ const originalListen = proto.listen;
 if (!(proto as any).__primeReleaseRoutesInstalled) {
   proto.__primeReleaseRoutesInstalled = true;
   proto.listen = function patchedListen(this: any, ...args: any[]) {
+    // Referral validation must run before checkout handlers so invalid referrals cannot award credit.
+    installReferralGuard(this);
+    installReferralRoutes(this);
+
     // Register the advanced coupon/checkout routes first so legacy handlers cannot shadow them.
     installCouponAdminRoutes(this);
     installCheckoutRoutesV2(this);
