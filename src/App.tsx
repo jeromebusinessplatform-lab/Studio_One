@@ -30,6 +30,7 @@ import AdminReceiptOcrPage from "./pages/admin/receipt-ocr.tsx";
 import AdminAnalyticsPage from "./pages/admin/analytics.tsx";
 import AdminChargesPage from "./pages/admin/charges.tsx";
 import AdminDiscountsPage from "./pages/admin/discounts.tsx";
+import AdminCouponConfiguratorPage from "./pages/admin/coupon-configurator.tsx";
 import AdminCashflowPage from "./pages/admin/cashflow.tsx";
 import AdminSupportPage from "./pages/admin/support.tsx";
 import InstallPrompt from "./components/InstallPrompt.tsx";
@@ -60,9 +61,7 @@ function AppShell() {
               });
             });
           }
-        } catch {
-          // ignore cleanup failures
-        }
+        } catch {}
       },
     });
     return unregister;
@@ -93,7 +92,9 @@ function AppShell() {
             <Route path="customers" element={<AdminCustomersPage />} />
             <Route path="courier" element={<AdminCourierPage />} />
             <Route path="charges" element={<AdminChargesPage />} />
-            <Route path="discounts" element={<AdminDiscountsPage />} />
+            <Route path="discounts" element={<AdminCouponConfiguratorPage />} />
+            <Route path="coupons" element={<AdminCouponConfiguratorPage />} />
+            <Route path="legacy-discounts" element={<AdminDiscountsPage />} />
             <Route path="analytics" element={<AdminAnalyticsPage />} />
             <Route path="cashflow" element={<AdminCashflowPage />} />
             <Route path="support" element={<AdminSupportPage />} />
