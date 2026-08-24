@@ -4,8 +4,6 @@ import { migratePrimeMemberIds } from "./primeIdentity.js";
 import { installCommerceRepairRoutes } from "./commerceRepairRoutes.js";
 import "./orderIdentityPatch.js";
 
-const VISIT_LOG_THROTTLE_MS = 30 * 60 * 1000;
-
 export async function createNotification(data: {
   telegramUserId: string;
   title: string;
@@ -20,13 +18,13 @@ export async function createNotification(data: {
 
   if (eventKey) {
     const existing = await firestoreService.getDocuments("notifications");
-    const duplicate = existing.some((n: any) =>
+    const duplicate = existing.find((n: any) =>
       String(n.telegramUserId || "") === telegramUserId && String(n.eventKey || "") === eventKey,
     );
-    if (duplicate) return existing.find((n: any) => String(n.telegramUserId || "") === telegramUserId && String(n.eventKey || "") === eventKey);
+    if (duplicate) return duplicate;
   }
 
-  const notification = {
+  return await firestoreService.addDocument("notifications", {
     telegramUserId,
     title: String(data.title || "Activity"),
     message: String(data.message || ""),
@@ -36,26 +34,6 @@ export async function createNotification(data: {
     eventKey,
     read: false,
     createdAt: Date.now(),
-  };
-  return await firestoreService.addDocument("notifications", notification);
-}
-
-async function logVisit(telegramUserId: string) {
-  if (!telegramUserId || telegramUserId.startsWith("guest_")) return;
-  const all = await firestoreService.getDocuments("notifications");
-  const lastVisit = all
-    .filter((n: any) => String(n.telegramUserId) === telegramUserId && String(n.type) === "visit")
-    .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0];
-  if (lastVisit && Date.now() - Number(lastVisit.createdAt || 0) < VISIT_LOG_THROTTLE_MS) return;
-
-  await createNotification({
-    telegramUserId,
-    title: "PRIME account visited",
-    message: `Your PRIME membership account was accessed on ${new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" })}. Your VIP tier, points, spending history and PRIME Member ID remain on the same account.`,
-    type: "visit",
-    iconName: "LogIn",
-    color: "#2563eb",
-    eventKey: `visit:${telegramUserId}:${Math.floor(Date.now() / VISIT_LOG_THROTTLE_MS)}`,
   });
 }
 
@@ -66,11 +44,14 @@ export function installNotificationRoutes(app: Application) {
   app.get("/api/notifications", async (req: Request, res: Response) => {
     try {
       const telegramUserId = String(req.query.telegramUserId || "");
-      if (telegramUserId) await logVisit(telegramUserId);
-
       const all = await firestoreService.getDocuments("notifications");
       const userList = all
-        .filter((n: any) => !telegramUserId || String(n.telegramUserId) === telegramUserId || !n.telegramUserId)
+        .filter((n: any) => {
+          // Visit/access notices are permanently excluded: notification center is an activity log,
+          // not a login/security-alert feed.
+          if (String(n.type || "") === "visit") return false;
+          return !telegramUserId || String(n.telegramUserId) === telegramUserId || !n.telegramUserId;
+        })
         .sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 
       return res.json({ notifications: userList });
