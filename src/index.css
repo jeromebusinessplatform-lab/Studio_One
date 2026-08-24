@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Roboto+Condensed:wght@400&display=swap');
 @import "tailwindcss";
 
 @layer base {
@@ -44,6 +44,24 @@
 
 .font-condensed {
   font-family: 'Roboto Condensed', 'Samsung One', sans-serif;
+}
+
+/*
+ * Critical numeric / identifier typography.
+ * JetBrains Mono is deliberately used for member IDs, order numbers, amounts,
+ * phone numbers, queue positions, dates, and other visually critical values.
+ * It is monospaced, tabular, and provides strong glyph separation for
+ * 0/O, 1/I/l, and similar easily-confused characters.
+ *
+ * Keep `.font-mono` aligned with this treatment because the application already
+ * uses that utility extensively for critical identifiers and numbers.
+ */
+.font-mono,
+.font-critical-data {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace !important;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1, 'zero' 1;
+  letter-spacing: -0.015em;
 }
 
 .checkout-input {
