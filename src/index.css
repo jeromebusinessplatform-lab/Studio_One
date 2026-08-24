@@ -68,3 +68,10 @@
   color: #9ca3af;
 }
 
+/* CheckoutRuntimePatch can hide a validation-message ancestor with inline display:none.
+   Keep the actual coupon/referral controls mounted and visible while validation runs. */
+div:has(input[placeholder="COUPON"]),
+div:has(input[placeholder="REFERRAL"]) {
+  display: block !important;
+  visibility: visible !important;
+}
