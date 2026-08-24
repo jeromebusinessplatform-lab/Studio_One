@@ -64,10 +64,14 @@ function buildPublicMember(customer: any, primeMemberId: string) {
   };
 }
 
+function sameMemberId(a: any, b: string) {
+  return String(a?.telegramUserId || a?.id || "").trim() === String(b || "").trim();
+}
+
 async function findReferrer(customers: any[], customer: any) {
   const referredById = String(customer?.referredBy || "").trim();
   if (!referredById) return null;
-  const referrer = customers.find((entry: any) => String(entry.telegramUserId || entry.id) === referredById);
+  const referrer = customers.find((entry: any) => sameMemberId(entry, referredById));
   if (!referrer) return null;
   const referrerMid = String(referrer.primeMemberId || "").trim().toUpperCase();
   return isPublicPrimeMemberId(referrerMid) ? buildPublicMember(referrer, referrerMid) : null;
@@ -119,7 +123,7 @@ export function installMemberProfileRoutes(app: Application) {
     if (!viewerId) return res.status(401).json({ error: "Telegram authentication required" });
     try {
       const customers = await firestoreService.getDocuments("customers");
-      const customer = customers.find((entry: any) => String(entry.telegramUserId || entry.id) === viewerId);
+      const customer = customers.find((entry: any) => sameMemberId(entry, viewerId));
       if (!customer) return res.status(404).json({ referrer: null });
       return res.json({ referrer: await findReferrer(customers, customer) });
     } catch (error) {
@@ -133,17 +137,33 @@ export function installMemberProfileRoutes(app: Application) {
     if (!viewerId) return res.status(401).json({ error: "Telegram authentication required" });
     try {
       const customers = await firestoreService.getDocuments("customers");
-      const customer = customers.find((entry: any) => String(entry.telegramUserId || entry.id) === viewerId);
+      const customer = customers.find((entry: any) => sameMemberId(entry, viewerId));
       if (!customer) return res.status(404).json({ referrals: [] });
-      const refereeIds = Array.isArray(customer.referees) ? customer.referees.map((id: any) => String(id).trim()).filter(Boolean) : [];
-      const referrals = refereeIds
-        .map((id) => customers.find((entry: any) => String(entry.telegramUserId || entry.id) === id))
+
+      const ids = new Set<string>();
+      const customerReferees = Array.isArray(customer.referees) ? customer.referees : [];
+      for (const id of customerReferees) ids.add(String(id).trim());
+
+      // The referral ledger is authoritative. It is used as a fallback when the denormalized
+      // customer.referees array was not updated by an older checkout path.
+      const ledger = await firestoreService.getDocuments("referrals");
+      for (const entry of ledger) {
+        const referrerId = String(entry.referrerId || entry.referrerTelegramUserId || "").trim();
+        if (referrerId === viewerId) {
+          const refereeId = String(entry.refereeId || entry.refereeTelegramUserId || entry.userId || "").trim();
+          if (refereeId) ids.add(refereeId);
+        }
+      }
+
+      const referrals = Array.from(ids)
+        .map((id) => customers.find((entry: any) => sameMemberId(entry, id)))
         .filter(Boolean)
         .map((referee: any) => {
           const primeMemberId = String(referee.primeMemberId || "").trim().toUpperCase();
           return isPublicPrimeMemberId(primeMemberId) ? buildPublicMember(referee, primeMemberId) : null;
         })
         .filter(Boolean);
+
       return res.json({ referrals, count: referrals.length });
     } catch (error) {
       console.error("Account referrals lookup error:", error);
