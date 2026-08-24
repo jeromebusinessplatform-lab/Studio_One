@@ -2,17 +2,26 @@ import crypto from "node:crypto";
 import { firestoreService } from "./firestoreService.js";
 
 const MID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-const MIGRATION_ID = "prime-mid-v7-random-10-char-no-legacy-pc";
+const REFERRAL_CODE_PREFIX = "REF";
+const MIGRATION_ID = "prime-identity-v8-mid-and-referral-code";
 let migrationPromise: Promise<void> | null = null;
 
-export function generatePrimeMemberId(used = new Set<string>()): string {
+function generateUniqueCode(alphabet: string, length: number, used: Set<string>): string {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const bytes = crypto.randomBytes(10);
+    const bytes = crypto.randomBytes(length);
     let value = "";
-    for (const byte of bytes) value += MID_ALPHABET[byte % MID_ALPHABET.length];
+    for (const byte of bytes) value += alphabet[byte % alphabet.length];
     if (!used.has(value)) return value;
   }
-  throw new Error("Unable to generate a unique PRIME MID");
+  throw new Error("Unable to generate a unique customer code");
+}
+
+export function generatePrimeMemberId(used = new Set<string>()): string {
+  return generateUniqueCode(MID_ALPHABET, 10, used);
+}
+
+export function generateReferralCode(used = new Set<string>()): string {
+  return `${REFERRAL_CODE_PREFIX}${generateUniqueCode(MID_ALPHABET, 7, used)}`;
 }
 
 export function isLegacyPrimeMemberId(value: unknown): value is string {
@@ -22,6 +31,11 @@ export function isLegacyPrimeMemberId(value: unknown): value is string {
 export function isValidPrimeMemberId(value: unknown): value is string {
   const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
   return /^[A-Z0-9]{10}$/.test(normalized) && !isLegacyPrimeMemberId(normalized);
+}
+
+export function isValidReferralCode(value: unknown): value is string {
+  const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return /^REF[A-Z0-9]{7}$/.test(normalized);
 }
 
 const rawGetDocument = firestoreService.getDocument.bind(firestoreService);
@@ -46,6 +60,15 @@ export async function ensureUniquePrimeMemberId(candidate: unknown, customerId: 
   if (isValidPrimeMemberId(proposed) && !duplicate) return proposed;
   const used = new Set(customers.map((customer: any) => String(customer.primeMemberId || "").toUpperCase()).filter(Boolean));
   return generatePrimeMemberId(used);
+}
+
+export async function ensureUniqueReferralCode(candidate: unknown, customerId: string): Promise<string> {
+  const proposed = String(candidate || "").trim().toUpperCase();
+  const customers = await rawGetDocuments("customers");
+  const duplicate = proposed && customers.some((customer: any) => String(customer.id) !== customerId && String(customer.referralCode || "").toUpperCase() === proposed);
+  if (isValidReferralCode(proposed) && !duplicate) return proposed;
+  const used = new Set(customers.map((customer: any) => String(customer.referralCode || "").toUpperCase()).filter(Boolean));
+  return generateReferralCode(used);
 }
 
 async function notifyMidMigration(telegramUserId: string, mid: string) {
@@ -76,24 +99,24 @@ export async function ensureCustomerPrimeMemberId(customerId: string, telegramUs
   const customer = existingCustomer || await rawGetDocument("customers", id);
   if (!customer) return null;
   const current = String(customer.primeMemberId || "").trim().toUpperCase();
-  if (isValidPrimeMemberId(current)) return current;
-
   const next = await ensureUniquePrimeMemberId(current, id);
-  await rawWriteDocument("customers", id, { primeMemberId: next, updatedAt: Date.now() }, true);
-  await notifyMidMigration(String(telegramUserId || customer.telegramUserId || id), next);
+  const currentReferral = String(customer.referralCode || "").trim().toUpperCase();
+  const nextReferral = await ensureUniqueReferralCode(currentReferral, id);
+  if (next !== current || nextReferral !== currentReferral) {
+    await rawWriteDocument("customers", id, { primeMemberId: next, referralCode: nextReferral, updatedAt: Date.now() }, true);
+    if (next !== current) await notifyMidMigration(String(telegramUserId || customer.telegramUserId || id), next);
+  }
   return next;
 }
 
 export async function repairCustomerPrimeRecord(customer: any): Promise<any> {
   const id = String(customer?.id || customer?.telegramUserId || "").trim();
   if (!id) return customer;
-  const mid = String(customer?.primeMemberId || "").trim().toUpperCase();
-  if (isValidPrimeMemberId(mid)) return customer;
-  const next = await ensureCustomerPrimeMemberId(id, String(customer?.telegramUserId || id), customer);
-  return next ? { ...customer, primeMemberId: next, updatedAt: Date.now() } : customer;
+  const repairedMid = await ensureCustomerPrimeMemberId(id, String(customer?.telegramUserId || id), customer);
+  const referralCode = await ensureUniqueReferralCode(customer?.referralCode, id);
+  return { ...customer, primeMemberId: repairedMid || customer?.primeMemberId, referralCode, updatedAt: Date.now() };
 }
 
-// Customer reads are self-healing: legacy PC... values are never exposed to the client.
 firestoreService.getDocument = async (collection: string, id: string) => {
   const document = await rawGetDocument(collection, id);
   if (collection !== "customers" || !document) return document;
@@ -108,18 +131,14 @@ firestoreService.getDocuments = async (collection: string, forceRefresh = false)
   return repaired;
 };
 
-// Writes are also guarded. This is critical because Telegram authentication runs on every
-// app open and must never be able to persist a legacy PC-prefixed MID again.
 firestoreService.setDocument = async (collection: string, id: string, data: Record<string, any>, merge = true) => {
   if (collection !== "customers") return rawWriteDocument(collection, id, data, merge);
   const existing = await rawGetDocument("customers", id);
   const incoming = { ...data };
-  const supplied = String(incoming.primeMemberId || "").trim().toUpperCase();
-  if (existing && isValidPrimeMemberId(String(existing.primeMemberId || "").trim().toUpperCase())) {
-    incoming.primeMemberId = String(existing.primeMemberId).trim().toUpperCase();
-  } else {
-    incoming.primeMemberId = await ensureUniquePrimeMemberId(supplied, id);
-  }
+  const suppliedMid = String(incoming.primeMemberId || "").trim().toUpperCase();
+  const suppliedReferral = String(incoming.referralCode || "").trim().toUpperCase();
+  incoming.primeMemberId = existing ? await ensureUniquePrimeMemberId(existing.primeMemberId || suppliedMid, id) : await ensureUniquePrimeMemberId(suppliedMid, id);
+  incoming.referralCode = existing ? await ensureUniqueReferralCode(existing.referralCode || suppliedReferral, id) : await ensureUniqueReferralCode(suppliedReferral, id);
   return rawWriteDocument(collection, id, incoming, merge);
 };
 
@@ -127,22 +146,23 @@ export async function selfHealPrimeMemberIds(): Promise<void> {
   if (migrationPromise) return migrationPromise;
   migrationPromise = (async () => {
     const customers = await rawGetDocuments("customers");
-    let migratedCount = 0;
+    let repairedCount = 0;
     for (const customer of customers) {
-      const before = String(customer?.primeMemberId || "").toUpperCase();
-      if (isValidPrimeMemberId(before)) continue;
+      const beforeMid = String(customer?.primeMemberId || "").toUpperCase();
+      const beforeReferral = String(customer?.referralCode || "").toUpperCase();
+      if (isValidPrimeMemberId(beforeMid) && isValidReferralCode(beforeReferral)) continue;
       await repairCustomerPrimeRecord(customer);
-      migratedCount += 1;
+      repairedCount += 1;
     }
     await rawWriteDocument("systemConfig", MIGRATION_ID, {
       completedAt: Date.now(),
       customerCount: customers.length,
-      migratedCount,
-      version: 7,
+      repairedCount,
+      version: 8,
     }, false);
   })().catch((error) => {
     migrationPromise = null;
-    console.error("PRIME MID self-healing failed:", error);
+    console.error("PRIME identity self-healing failed:", error);
   });
   return migrationPromise;
 }
