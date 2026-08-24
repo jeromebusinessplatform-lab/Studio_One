@@ -37,7 +37,6 @@ export function installReleaseRoutes(app: Application) {
         telegramUserId: String(user.id),
         telegramDisplayName: [user.first_name, user.last_name].filter(Boolean).join(" ") || `TG User ${user.id}`,
         telegramUsername: user.username || null,
-        primeMemberId: `PC${String(user.id).slice(0, 8).toUpperCase()}`,
         updatedAt: now
       };
       if (!existing) {
@@ -238,56 +237,35 @@ export function installReleaseRoutes(app: Application) {
 
   app.post("/api/admin/products/batch", async (req, res) => {
     if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" });
-    const { action, ids, category, available, badge, badgeExpiry } = req.body || {};
+    const { action, ids, category, inventoryDelta, active } = req.body || {};
     if (!action || !Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: "Invalid batch action payload" });
+      return res.status(400).json({ error: "Invalid batch product action payload" });
     }
     try {
       if (action === "delete") {
         await firestoreService.batchDelete("products", ids.map(String));
-      } else if (action === "update_category") {
-        if (!category) return res.status(400).json({ error: "Target category required" });
-        await firestoreService.batchUpdate("products", ids.map(String), { category });
-      } else if (action === "set_availability") {
-        const isAvail = available === true;
-        await firestoreService.batchUpdate("products", ids.map(String), {
-          available: isAvail,
-          ...(isAvail ? {} : { stock: 0 }),
-        });
-      } else if (action === "set_badge") {
-        await firestoreService.batchUpdate("products", ids.map(String), {
-          badge: badge || null,
-          badgeExpiry: badgeExpiry || null,
-        });
+      } else if (action === "update_inventory") {
+        const delta = Number(inventoryDelta) || 0;
+        for (const id of ids) {
+          const product = (await firestoreService.getDocument("products", String(id))) || {};
+          const inventory = Math.max(0, Number(product.inventory ?? 0) + delta);
+          await firestoreService.updateDocument("products", String(id), { inventory });
+        }
+      } else if (action === "set_active") {
+        await firestoreService.batchUpdate("products", ids.map(String), { active: active !== false });
+      } else if (action === "set_category") {
+        const nextCategory = String(category || "").trim();
+        if (!nextCategory) return res.status(400).json({ error: "Category required" });
+        await firestoreService.batchUpdate("products", ids.map(String), { category: nextCategory });
       } else {
-        return res.status(400).json({ error: "Unknown batch action" });
+        return res.status(400).json({ error: "Unknown batch product action" });
       }
-
       return res.json({ success: true, count: ids.length, action });
     } catch (e: any) {
-      console.error("Products batch error:", e);
+      console.error("Product batch error:", e);
       return res.status(500).json({ error: e?.message || "Batch product operation failed" });
     }
   });
 
-  app.post("/api/admin/batch-delete", async (req, res) => {
-    if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" });
-    const { collection, ids } = req.body || {};
-    if (!collection || typeof collection !== "string" || !Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: "Invalid collection or ids array for batch deletion" });
-    }
-    const allowedCollections = ["products", "customers", "orders", "couriers", "charges", "discounts"];
-    if (!allowedCollections.includes(collection)) {
-      return res.status(403).json({ error: "Batch delete is not permitted on this collection" });
-    }
-    try {
-      const sanitizedIds = ids.map(String).filter((id) => id.length > 0 && id.length <= 150);
-      await firestoreService.batchDelete(collection, sanitizedIds);
-      return res.json({ success: true, count: sanitizedIds.length, collection });
-    } catch (e: any) {
-      console.error(`Batch delete error for ${collection}:`, e);
-      return res.status(500).json({ error: e?.message || `Failed to batch delete from ${collection}` });
-    }
-  });
+  app.get("/api/health", (_req, res) => res.json({ ok: true, service: "studio-one" }));
 }
-
