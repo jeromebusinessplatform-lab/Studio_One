@@ -27,13 +27,17 @@ function telegramUserId(req: any): string | null {
   }
 }
 
+function isPublicPrimeMemberId(value: string) {
+  return /^[A-Z0-9]{10}$/.test(value) && !/^PC[A-Z0-9]{8}$/.test(value);
+}
+
 export function installMemberProfileRoutes(app: Application) {
   app.get("/api/members/:primeMemberId", async (req, res) => {
     const viewerId = telegramUserId(req);
     if (!viewerId) return res.status(401).json({ error: "Telegram authentication required" });
 
     const primeMemberId = String(req.params.primeMemberId || "").trim().toUpperCase();
-    if (!/^[A-Z0-9]{10}$/.test(primeMemberId)) return res.status(400).json({ error: "Invalid PRIME Member ID" });
+    if (!isPublicPrimeMemberId(primeMemberId)) return res.status(400).json({ error: "Invalid PRIME Member ID" });
 
     try {
       const customers = await firestoreService.getDocuments("customers");
