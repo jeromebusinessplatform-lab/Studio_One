@@ -1,4 +1,5 @@
 import { firestoreService } from "./firestoreService.js";
+import { isValidPrimeMemberId } from "./primeIdentity.js";
 
 const MANILA_TIME_ZONE = "Asia/Manila";
 let installed = false;
@@ -32,6 +33,14 @@ async function nextAvailableOrderNumber(): Promise<string> {
   throw new Error("Unable to allocate a unique PRIME Order Number");
 }
 
+async function hydrateOrderPrimeMemberId(data: Record<string, any>): Promise<string | null> {
+  const telegramUserId = String(data.telegramUserId || "").trim();
+  if (!telegramUserId) return null;
+  const customer = await firestoreService.getDocument("customers", telegramUserId);
+  const storedMid = String(customer?.primeMemberId || "").trim().toUpperCase();
+  return isValidPrimeMemberId(storedMid) ? storedMid : null;
+}
+
 export function installOrderNumberEnforcer() {
   if (installed) return;
   installed = true;
@@ -40,7 +49,8 @@ export function installOrderNumberEnforcer() {
   firestoreService.addDocument = async (collection: string, data: Record<string, any>) => {
     if (collection === "orders") {
       const orderNumber = await nextAvailableOrderNumber();
-      return originalAddDocument(collection, { ...data, orderNumber });
+      const storedMid = await hydrateOrderPrimeMemberId(data);
+      return originalAddDocument(collection, { ...data, orderNumber, ...(storedMid ? { primeMemberId: storedMid } : {}) });
     }
     return originalAddDocument(collection, data);
   };
