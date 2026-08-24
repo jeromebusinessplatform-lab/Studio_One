@@ -31,17 +31,13 @@ export function useCustomers() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/customers", {
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
-      });
+      const response = await fetch("/api/customers", { credentials: "same-origin", cache: "no-store" });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Unable to load customers");
       const list = Array.isArray(data.customers)
         ? data.customers.map((d: any) => {
             const pts = Number(d.pointsBalance ?? d.points ?? 0);
-            const primeMemberId = String(d.primeMemberId || "").trim().toUpperCase();
+            const rawMid = String(d.primeMemberId || "").trim().toUpperCase();
             return {
               id: String(d.id),
               telegramUserId: String(d.telegramUserId || d.id),
@@ -49,7 +45,7 @@ export function useCustomers() {
               telegramUsername: d.telegramUsername || undefined,
               avatarUrl: d.avatarUrl || undefined,
               manualAvatarOverride: !!d.manualAvatarOverride,
-              primeMemberId: /^[A-Z0-9]{10}$/.test(primeMemberId) ? primeMemberId : "—",
+              primeMemberId: /^[A-Z0-9]{10}$/.test(rawMid) ? rawMid : "—",
               vipTier: (d.vipTier || "Bronze") as VipTier,
               points: pts,
               pointsBalance: pts,
@@ -166,7 +162,9 @@ export function useCustomers() {
     setCustomers((prev) => prev.filter((c) => !ids.includes(c.id)));
     try {
       const res = await fetch("/api/admin/batch-delete", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ collection: "customers", ids }) });
-      if (!res.ok) await fetch("/api/admin/customers/batch", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", ids }) });
+      if (!res.ok) {
+        await fetch("/api/admin/customers/batch", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", ids }) });
+      }
     } catch (err) {
       console.error("batchDeleteCustomers error:", err);
       throw err;
