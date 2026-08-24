@@ -9,7 +9,8 @@
     "start": "node --require ./dist/preload.cjs dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "reset:prelaunch": "tsx scripts/resetPrelaunchData.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -26,6 +27,7 @@
     "firebase": "^12.18.0",
     "firebase-admin": "^13.6.0",
     "form-data": "^4.0.6",
+    "firebase-admin": "^13.6.0",
     "html5-qrcode": "^2.3.8",
     "idb": "^8.0.3",
     "leaflet": "^1.9.4",
@@ -48,8 +50,8 @@
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.21",
     "esbuild": "^0.25.0",
-    "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "@types/express": "^4.17.21"
+    "@types/express": "^4.17.21",
+    "tsx": "^4.21.0"
   }
 }
