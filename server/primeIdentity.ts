@@ -21,8 +21,18 @@ export function isValidPrimeMemberId(value: unknown): value is string {
 
 const rawGetDocument = firestoreService.getDocument.bind(firestoreService);
 const rawGetDocuments = firestoreService.getDocuments.bind(firestoreService);
-const rawSetDocument = firestoreService.setDocument.bind(firestoreService);
-const rawAddDocument = firestoreService.addDocument.bind(firestoreService);
+const rawSetMethod = firestoreService.setDocument;
+const rawWriteDocument = rawSetMethod.bind({
+  ...firestoreService,
+  getDocument: rawGetDocument,
+  getDocuments: rawGetDocuments,
+});
+const rawAddDocument = firestoreService.addDocument.bind({
+  ...firestoreService,
+  setDocument: rawWriteDocument,
+  getDocument: rawGetDocument,
+  getDocuments: rawGetDocuments,
+});
 
 export async function ensureUniquePrimeMemberId(candidate: unknown, customerId: string): Promise<string> {
   const proposed = String(candidate || "").trim().toUpperCase();
@@ -64,7 +74,7 @@ export async function ensureCustomerPrimeMemberId(customerId: string, telegramUs
   if (isValidPrimeMemberId(current)) return current;
 
   const next = await ensureUniquePrimeMemberId(current, id);
-  await rawSetDocument("customers", id, { primeMemberId: next, updatedAt: Date.now() }, true);
+  await rawWriteDocument("customers", id, { primeMemberId: next, updatedAt: Date.now() }, true);
   await notifyMidMigration(String(telegramUserId || customer.telegramUserId || id), next);
   return next;
 }
@@ -78,8 +88,7 @@ export async function repairCustomerPrimeRecord(customer: any): Promise<any> {
   return next ? { ...customer, primeMemberId: next, updatedAt: Date.now() } : customer;
 }
 
-// Enforce the migration at the customer read boundary. This removes the race where
-// startup migration is still running while the UI reads the customer document.
+// Enforce the migration at the customer read boundary so customer APIs cannot return a legacy PC... MID.
 firestoreService.getDocument = async (collection: string, id: string) => {
   const document = await rawGetDocument(collection, id);
   if (collection !== "customers" || !document) return document;
@@ -105,7 +114,7 @@ export async function selfHealPrimeMemberIds(): Promise<void> {
       await repairCustomerPrimeRecord(customer);
       migratedCount += 1;
     }
-    await rawSetDocument("systemConfig", MIGRATION_ID, {
+    await rawWriteDocument("systemConfig", MIGRATION_ID, {
       completedAt: Date.now(),
       customerCount: customers.length,
       migratedCount,
