@@ -31,20 +31,25 @@ export function useCustomers() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/customers", { credentials: "same-origin" });
+      const response = await fetch("/api/customers", {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+      });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Unable to load customers");
       const list = Array.isArray(data.customers)
         ? data.customers.map((d: any) => {
             const pts = Number(d.pointsBalance ?? d.points ?? 0);
+            const primeMemberId = String(d.primeMemberId || "").trim().toUpperCase();
             return {
               id: String(d.id),
               telegramUserId: String(d.telegramUserId || d.id),
               telegramDisplayName: String(d.telegramDisplayName || "Unknown"),
               telegramUsername: d.telegramUsername || undefined,
-              avatarUrl: d.avatarUrl || undefined, // Map this
+              avatarUrl: d.avatarUrl || undefined,
               manualAvatarOverride: !!d.manualAvatarOverride,
-              primeMemberId: String(d.primeMemberId || `PC${String(d.id).slice(0, 8).toUpperCase()}`),
+              primeMemberId: /^[A-Z0-9]{10}$/.test(primeMemberId) ? primeMemberId : "—",
               vipTier: (d.vipTier || "Bronze") as VipTier,
               points: pts,
               pointsBalance: pts,
@@ -106,9 +111,7 @@ export function useCustomers() {
   }, []);
 
   const updateCustomerPoints = useCallback(async (id: string, pointsBalance: number) => {
-    setCustomers((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, points: pointsBalance, pointsBalance } : c))
-    );
+    setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, points: pointsBalance, pointsBalance } : c)));
     try {
       const res = await fetch(`/api/customers/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -126,10 +129,7 @@ export function useCustomers() {
   const deleteCustomer = useCallback(async (id: string) => {
     setCustomers((prev) => prev.filter((c) => c.id !== id));
     try {
-      const res = await fetch(`/api/customers/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-        credentials: "same-origin",
-      });
+      const res = await fetch(`/api/customers/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "same-origin" });
       if (!res.ok) throw new Error("Failed to delete customer on server");
     } catch (err) {
       console.error("deleteCustomer error:", err);
@@ -141,12 +141,7 @@ export function useCustomers() {
     if (!ids.length) return;
     setCustomers((prev) => prev.map((c) => (ids.includes(c.id) ? { ...c, vipTier } : c)));
     try {
-      const res = await fetch("/api/admin/customers/batch", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update_vip", ids, vipTier }),
-      });
+      const res = await fetch("/api/admin/customers/batch", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "update_vip", ids, vipTier }) });
       if (!res.ok) throw new Error("Failed to batch update VIP tiers");
     } catch (err) {
       console.error("batchUpdateVip error:", err);
@@ -156,20 +151,9 @@ export function useCustomers() {
 
   const batchAdjustPoints = useCallback(async (ids: string[], pointsDelta: number) => {
     if (!ids.length) return;
-    setCustomers((prev) =>
-      prev.map((c) => {
-        if (!ids.includes(c.id)) return c;
-        const next = Math.max(0, (c.pointsBalance || c.points || 0) + pointsDelta);
-        return { ...c, points: next, pointsBalance: next };
-      })
-    );
+    setCustomers((prev) => prev.map((c) => ids.includes(c.id) ? { ...c, points: Math.max(0, (c.pointsBalance || c.points || 0) + pointsDelta), pointsBalance: Math.max(0, (c.pointsBalance || c.points || 0) + pointsDelta) } : c));
     try {
-      const res = await fetch("/api/admin/customers/batch", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "adjust_points", ids, pointsDelta }),
-      });
+      const res = await fetch("/api/admin/customers/batch", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "adjust_points", ids, pointsDelta }) });
       if (!res.ok) throw new Error("Failed to batch adjust customer points");
     } catch (err) {
       console.error("batchAdjustPoints error:", err);
@@ -181,36 +165,13 @@ export function useCustomers() {
     if (!ids.length) return;
     setCustomers((prev) => prev.filter((c) => !ids.includes(c.id)));
     try {
-      const res = await fetch("/api/admin/batch-delete", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collection: "customers", ids }),
-      });
-      if (!res.ok) {
-        await fetch("/api/admin/customers/batch", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "delete", ids }),
-        });
-      }
+      const res = await fetch("/api/admin/batch-delete", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ collection: "customers", ids }) });
+      if (!res.ok) await fetch("/api/admin/customers/batch", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", ids }) });
     } catch (err) {
       console.error("batchDeleteCustomers error:", err);
       throw err;
     }
   }, []);
 
-  return {
-    customers,
-    loading,
-    refresh: load,
-    updateCustomerAvatar,
-    updateCustomerVip,
-    updateCustomerPoints,
-    deleteCustomer,
-    batchUpdateVip,
-    batchAdjustPoints,
-    batchDeleteCustomers,
-  };
+  return { customers, loading, refresh: load, updateCustomerAvatar, updateCustomerVip, updateCustomerPoints, deleteCustomer, batchUpdateVip, batchAdjustPoints, batchDeleteCustomers };
 }
