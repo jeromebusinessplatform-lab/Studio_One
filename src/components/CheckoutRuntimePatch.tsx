@@ -57,6 +57,39 @@ function hydratePrimeMid() {
     .catch(() => {});
 }
 
+function validateReferralInput(input: HTMLInputElement) {
+  const code = input.value.trim().toUpperCase();
+  if (!code) {
+    input.style.borderColor = "";
+    input.title = "";
+    return;
+  }
+  void fetch("/api/referrals/validate", {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  })
+    .then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (input.value.trim().toUpperCase() !== code) return;
+      if (response.ok && data.valid) {
+        input.style.borderColor = "#16a34a";
+        input.title = data.kind === "PRIME_MEMBER_ID" ? "Valid PRIME Member ID" : "Valid Referral Code";
+      } else {
+        input.style.borderColor = "#dc2626";
+        input.title = data.error || "Referral Code or PRIME Member ID not found";
+      }
+    })
+    .catch(() => {
+      if (input.value.trim().toUpperCase() === code) {
+        input.style.borderColor = "#dc2626";
+        input.title = "Unable to validate referral right now";
+      }
+    });
+}
+
 export default function CheckoutRuntimePatch() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -64,11 +97,19 @@ export default function CheckoutRuntimePatch() {
   useEffect(() => {
     if (location.pathname !== "/shop/checkout") return;
     let disposed = false;
+    const timers = new WeakMap<HTMLInputElement, number>();
 
     const onInput = (event: Event) => {
       if (disposed) return;
       const input = event.target as HTMLInputElement | null;
-      if (input instanceof HTMLInputElement) saveCheckoutCode(input);
+      if (!(input instanceof HTMLInputElement)) return;
+      saveCheckoutCode(input);
+      if (input.placeholder === "REFERRAL") {
+        const oldTimer = timers.get(input);
+        if (oldTimer) window.clearTimeout(oldTimer);
+        const timer = window.setTimeout(() => validateReferralInput(input), 300);
+        timers.set(input, timer);
+      }
     };
 
     const onPrimeMidClick = (event: Event) => {
