@@ -116,6 +116,7 @@ export default function AccountPage() {
     avatarUrl: customer.avatarUrl,
   };
   const hydratedOrderCount = orders.length;
+  const referralCount = customerData.referrals || customerData.referees?.length || 0;
 
   return (
     <div className="bg-[#f3f4f6] min-h-full pb-10">
@@ -139,7 +140,7 @@ export default function AccountPage() {
           <div className="flex justify-between"><span>Order Count:</span><span className="font-critical-data font-bold">{hydratedOrderCount}</span></div>
           <div className="flex justify-between"><span>Total Spending:</span><span className="font-critical-data font-bold">₱{(customerData.totalSpending || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
           <div className="flex justify-between"><span>Total Discounts Saved:</span><span className="font-critical-data font-bold text-emerald-600">₱{(customerData.totalDiscounts || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-          <div className="flex justify-between"><span>Referrals Made:</span><span className="font-critical-data font-bold">{customerData.referrals || customerData.referees?.length || 0}</span></div>
+          <div className="flex justify-between"><span>Referrals Made:</span><button type="button" onClick={() => window.dispatchEvent(new CustomEvent("prime:open-referrals"))} className="font-critical-data font-bold underline decoration-dotted underline-offset-2 hover:opacity-70 cursor-pointer" aria-label={`View ${referralCount} referred members`}>{referralCount.toLocaleString()}</button></div>
         </div>
 
         {referrer && (
