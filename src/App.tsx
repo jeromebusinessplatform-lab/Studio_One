@@ -34,7 +34,6 @@ import AdminCashflowPage from "./pages/admin/cashflow.tsx";
 import AdminSupportPage from "./pages/admin/support.tsx";
 import InstallPrompt from "./components/InstallPrompt.tsx";
 import NotFound from "./pages/NotFound.tsx";
-import CheckoutRuntimePatch from "./components/CheckoutRuntimePatch.tsx";
 import AdminCourierConfigPanel from "./components/AdminCourierConfigPanel.tsx";
 import PrimeMemberProfile from "./components/PrimeMemberProfile.tsx";
 
@@ -72,7 +71,6 @@ function AppShell() {
   return (
     <div className={`w-full min-h-[100dvh] flex flex-col justify-start overflow-x-hidden ${isAdmin ? "bg-white text-neutral-900" : "bg-[#f3f4f6] text-neutral-900"}`}>
       <div className="flex-1 w-full flex flex-col min-h-0">
-        <CheckoutRuntimePatch />
         <AdminCourierConfigPanel />
         <Routes>
           <Route path="/" element={<Navigate to="/shop" replace />} />

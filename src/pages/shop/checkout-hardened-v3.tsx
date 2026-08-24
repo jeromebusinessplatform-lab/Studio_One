@@ -317,10 +317,12 @@ export default function CheckoutPage() {
     return <EmptyCheckout />;
   }
 
-  // Derive Prime Member ID
-  const primeMid = customer?.telegramUserId
-    ? `PC${customer.telegramUserId.slice(0, 8).toUpperCase()}`
-    : "PC-GUEST";
+  // PRIME Member ID is always the server-hydrated customer identity.
+  // Never derive or synthesize an MID from the Telegram User ID.
+  const hydratedPrimeMid = String(customer?.primeMemberId || "").trim().toUpperCase();
+  const primeMid = /^[A-Z0-9]{10}$/.test(hydratedPrimeMid) && !/^PC[A-Z0-9]{8}$/.test(hydratedPrimeMid)
+    ? hydratedPrimeMid
+    : "";
 
   return (
     <div className="w-full min-h-screen bg-[#f3f4f6] pb-28">
