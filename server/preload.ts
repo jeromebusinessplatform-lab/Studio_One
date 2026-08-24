@@ -9,9 +9,9 @@ import { migratePrimeMemberIds } from "./primeIdentity.js";
 import { installActivityLogger } from "./activityLogger.js";
 import { installMemberProfileRoutes } from "./memberProfileRoutes.js";
 import { installOrderNumberEnforcer } from "./orderNumberEnforcer.js";
+import { installCouponAdminRoutes } from "./couponAdminRoutes.js";
+import { installCheckoutRoutesV2 } from "./checkoutRoutesV2.js";
 
-// Explicit release revision keeps external IDE/repository indexers anchored to the
-// latest Studio_One commerce fix set instead of an older cached repository snapshot.
 export const STUDIO_ONE_SYNC_REVISION = "2026-08-24-prime-commerce-fixes";
 
 installActivityLogger();
@@ -22,6 +22,10 @@ const originalListen = proto.listen;
 if (!(proto as any).__primeReleaseRoutesInstalled) {
   proto.__primeReleaseRoutesInstalled = true;
   proto.listen = function patchedListen(this: any, ...args: any[]) {
+    // Register the advanced coupon/checkout routes first so legacy handlers cannot shadow them.
+    installCouponAdminRoutes(this);
+    installCheckoutRoutesV2(this);
+
     installIdentityOrderRepairRoutes(this);
     installCommerceRepairRoutes(this);
     installReleaseRoutes(this);
