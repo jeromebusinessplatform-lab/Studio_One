@@ -4,6 +4,7 @@ import { firestoreService } from "./firestoreService.js";
 import { isValidPrimeMemberId, isValidReferralCode } from "./primeIdentity.js";
 
 const TG_COOKIE = "prime_telegram_session";
+const ACTIVE_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
 function cookie(req: any, name: string) {
   const value = req.headers.cookie || "";
@@ -30,6 +31,37 @@ function telegramUserId(req: any): string | null {
 
 function isPublicPrimeMemberId(value: string) {
   return isValidPrimeMemberId(value) && !/^PC[A-Z0-9]{8}$/.test(value);
+}
+
+function publicAccountStatus(customer: any) {
+  if (customer?.accountStatus === "inactive" || customer?.isActive === false) return "INACTIVE" as const;
+  const lastActivity = Number(customer?.lastAuthenticatedAt || customer?.updatedAt || customer?.createdAt || 0);
+  return lastActivity && Date.now() - lastActivity <= ACTIVE_WINDOW_MS ? "ACTIVE" as const : "INACTIVE" as const;
+}
+
+function vipTierStyle(vipTier: string) {
+  const tier = String(vipTier || "Bronze");
+  const styles: Record<string, { label: string; tone: string }> = {
+    Bronze: { label: "BRONZE", tone: "bronze" },
+    Silver: { label: "SILVER", tone: "silver" },
+    Gold: { label: "GOLD", tone: "gold" },
+    Platinum: { label: "PLATINUM", tone: "platinum" },
+  };
+  return styles[tier] || styles.Bronze;
+}
+
+function buildPublicMember(customer: any, primeMemberId: string) {
+  const vipTier = String(customer.vipTier || "Bronze");
+  const style = vipTierStyle(vipTier);
+  return {
+    telegramDisplayName: String(customer.telegramDisplayName || "PRIME Member"),
+    telegramUsername: customer.telegramUsername ? String(customer.telegramUsername) : null,
+    primeMemberId,
+    referralCount: Math.max(0, Number(customer.referrals || (Array.isArray(customer.referees) ? customer.referees.length : 0))),
+    vipTier,
+    vipTone: style.tone,
+    accountStatus: publicAccountStatus(customer),
+  };
 }
 
 export function installMemberProfileRoutes(app: Application) {
@@ -70,13 +102,18 @@ export function installMemberProfileRoutes(app: Application) {
       const customer = customers.find((entry: any) => String(entry.primeMemberId || "").trim().toUpperCase() === primeMemberId);
       if (!customer) return res.status(404).json({ error: "PRIME Member not found" });
 
+      let referredBy: ReturnType<typeof buildPublicMember> | null = null;
+      const referredById = String(customer.referredBy || "").trim();
+      if (referredById) {
+        const referrer = customers.find((entry: any) => String(entry.telegramUserId || entry.id) === referredById);
+        if (referrer && isValidPrimeMemberId(String(referrer.primeMemberId || "").trim().toUpperCase())) {
+          referredBy = buildPublicMember(referrer, String(referrer.primeMemberId).trim().toUpperCase());
+        }
+      }
+
       return res.json({
-        member: {
-          telegramDisplayName: String(customer.telegramDisplayName || "PRIME Member"),
-          telegramUsername: customer.telegramUsername ? String(customer.telegramUsername) : null,
-          primeMemberId,
-          referralCount: Math.max(0, Number(customer.referrals || (Array.isArray(customer.referees) ? customer.referees.length : 0))),
-        },
+        member: buildPublicMember(customer, primeMemberId),
+        referredBy,
       });
     } catch (error) {
       console.error("Public member profile lookup error:", error);
