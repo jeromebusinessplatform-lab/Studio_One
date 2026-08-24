@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { firestoreService } from "./firestoreService.js";
 
 const MID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-const MIGRATION_ID = "prime-mid-v5-read-boundary-self-healing";
+const MIGRATION_ID = "prime-mid-v6-read-write-boundary-self-healing";
 let migrationPromise: Promise<void> | null = null;
 
 export function generatePrimeMemberId(used = new Set<string>()): string {
@@ -48,7 +48,7 @@ async function notifyMidMigration(telegramUserId: string, mid: string) {
   const exists = notifications.some((n: any) =>
     String(n.telegramUserId) === telegramUserId &&
     String(n.type) === "account" &&
-    String(n.migrationVersion || "") === "v5" &&
+    String(n.migrationVersion || "") === "v6" &&
     String(n.message || "").includes(mid),
   );
   if (exists) return;
@@ -60,7 +60,7 @@ async function notifyMidMigration(telegramUserId: string, mid: string) {
     iconName: "ShieldAlert",
     color: "#2563eb",
     read: false,
-    migrationVersion: "v5",
+    migrationVersion: "v6",
     createdAt: Date.now(),
   });
 }
@@ -88,7 +88,7 @@ export async function repairCustomerPrimeRecord(customer: any): Promise<any> {
   return next ? { ...customer, primeMemberId: next, updatedAt: Date.now() } : customer;
 }
 
-// Enforce the migration at the customer read boundary so customer APIs cannot return a legacy PC... MID.
+// Customer reads are self-healing: legacy PC... values are never exposed to the client.
 firestoreService.getDocument = async (collection: string, id: string) => {
   const document = await rawGetDocument(collection, id);
   if (collection !== "customers" || !document) return document;
@@ -101,6 +101,21 @@ firestoreService.getDocuments = async (collection: string, forceRefresh = false)
   const repaired: any[] = [];
   for (const customer of documents) repaired.push(await repairCustomerPrimeRecord(customer));
   return repaired;
+};
+
+// Writes are also guarded. This is critical because Telegram authentication runs on every
+// app open and previously wrote PC{telegramId} back into Firestore after migration.
+firestoreService.setDocument = async (collection: string, id: string, data: Record<string, any>, merge = true) => {
+  if (collection !== "customers") return rawWriteDocument(collection, id, data, merge);
+  const existing = await rawGetDocument("customers", id);
+  const incoming = { ...data };
+  const supplied = String(incoming.primeMemberId || "").trim().toUpperCase();
+  if (existing && isValidPrimeMemberId(String(existing.primeMemberId || "").trim().toUpperCase())) {
+    incoming.primeMemberId = String(existing.primeMemberId).trim().toUpperCase();
+  } else {
+    incoming.primeMemberId = await ensureUniquePrimeMemberId(supplied, id);
+  }
+  return rawWriteDocument(collection, id, incoming, merge);
 };
 
 export async function selfHealPrimeMemberIds(): Promise<void> {
@@ -118,7 +133,7 @@ export async function selfHealPrimeMemberIds(): Promise<void> {
       completedAt: Date.now(),
       customerCount: customers.length,
       migratedCount,
-      version: 5,
+      version: 6,
     }, false);
   })().catch((error) => {
     migrationPromise = null;
