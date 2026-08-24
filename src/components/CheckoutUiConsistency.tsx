@@ -100,7 +100,7 @@ function updateDeliveryFeeLabel() {
   const labelNodes = Array.from(document.querySelectorAll("span, div, p"));
   const label = labelNodes.find((node) => {
     const value = textOf(node).toUpperCase();
-    return value === "DELIVERY DUE NOW" || /^(STANDARD|EXPRESS|PRIORITY) DELIVERY FEE$/.test(value);
+    return value === "DELIVERY DUE NOW" || value === "DELIVERY FEE" || /^(STANDARD|EXPRESS|PRIORITY) DELIVERY FEE$/.test(value);
   });
   if (!label) return;
 
@@ -139,11 +139,22 @@ export default function CheckoutUiConsistency() {
       updateDeliveryFeeLabel();
     };
 
+    const handleCourierSelection = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      const button = target?.closest("[data-prime-courier-grid] button");
+      if (!button) return;
+      window.requestAnimationFrame(apply);
+      window.setTimeout(updateDeliveryFeeLabel, 30);
+    };
+
     requestAnimationFrame(apply);
     const timers = [250, 800, 1400].map((delay) => window.setTimeout(apply, delay));
+    document.addEventListener("click", handleCourierSelection, true);
+
     return () => {
       disposed = true;
       timers.forEach(window.clearTimeout);
+      document.removeEventListener("click", handleCourierSelection, true);
     };
   }, [location.pathname]);
 
