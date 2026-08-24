@@ -64,6 +64,15 @@ function buildPublicMember(customer: any, primeMemberId: string) {
   };
 }
 
+async function findReferrer(customers: any[], customer: any) {
+  const referredById = String(customer?.referredBy || "").trim();
+  if (!referredById) return null;
+  const referrer = customers.find((entry: any) => String(entry.telegramUserId || entry.id) === referredById);
+  if (!referrer) return null;
+  const referrerMid = String(referrer.primeMemberId || "").trim().toUpperCase();
+  return isPublicPrimeMemberId(referrerMid) ? buildPublicMember(referrer, referrerMid) : null;
+}
+
 export function installMemberProfileRoutes(app: Application) {
   app.post("/api/referrals/validate", async (req, res) => {
     const viewerId = telegramUserId(req);
@@ -90,6 +99,20 @@ export function installMemberProfileRoutes(app: Application) {
     }
   });
 
+  app.get("/api/account/referrer", async (req, res) => {
+    const viewerId = telegramUserId(req);
+    if (!viewerId) return res.status(401).json({ error: "Telegram authentication required" });
+    try {
+      const customers = await firestoreService.getDocuments("customers");
+      const customer = customers.find((entry: any) => String(entry.telegramUserId || entry.id) === viewerId);
+      if (!customer) return res.status(404).json({ referrer: null });
+      return res.json({ referrer: await findReferrer(customers, customer) });
+    } catch (error) {
+      console.error("Account referrer lookup error:", error);
+      return res.status(500).json({ error: "Unable to load referrer" });
+    }
+  });
+
   app.get("/api/members/:primeMemberId", async (req, res) => {
     const viewerId = telegramUserId(req);
     if (!viewerId) return res.status(401).json({ error: "Telegram authentication required" });
@@ -101,20 +124,7 @@ export function installMemberProfileRoutes(app: Application) {
       const customers = await firestoreService.getDocuments("customers");
       const customer = customers.find((entry: any) => String(entry.primeMemberId || "").trim().toUpperCase() === primeMemberId);
       if (!customer) return res.status(404).json({ error: "PRIME Member not found" });
-
-      let referredBy: ReturnType<typeof buildPublicMember> | null = null;
-      const referredById = String(customer.referredBy || "").trim();
-      if (referredById) {
-        const referrer = customers.find((entry: any) => String(entry.telegramUserId || entry.id) === referredById);
-        if (referrer && isValidPrimeMemberId(String(referrer.primeMemberId || "").trim().toUpperCase())) {
-          referredBy = buildPublicMember(referrer, String(referrer.primeMemberId).trim().toUpperCase());
-        }
-      }
-
-      return res.json({
-        member: buildPublicMember(customer, primeMemberId),
-        referredBy,
-      });
+      return res.json({ member: buildPublicMember(customer, primeMemberId), referredBy: await findReferrer(customers, customer) });
     } catch (error) {
       console.error("Public member profile lookup error:", error);
       return res.status(500).json({ error: "Unable to load PRIME Member profile" });
