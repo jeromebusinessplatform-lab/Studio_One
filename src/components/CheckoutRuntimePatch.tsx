@@ -1,6 +1,18 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+const CODE_STORAGE_KEY = "prime_checkout_codes_v2";
+
+function saveCheckoutCode(input: HTMLInputElement) {
+  if (input.placeholder !== "COUPON" && input.placeholder !== "REFERRAL") return;
+  try {
+    const current = JSON.parse(sessionStorage.getItem(CODE_STORAGE_KEY) || "{}");
+    if (input.placeholder === "COUPON") current.coupon = input.value.toUpperCase();
+    if (input.placeholder === "REFERRAL") current.referral = input.value.toUpperCase();
+    sessionStorage.setItem(CODE_STORAGE_KEY, JSON.stringify(current));
+  } catch {}
+}
+
 function selectedDeliveryType() {
   const selected = Array.from(document.querySelectorAll("button")).find((button) => {
     const cls = button.className || "";
@@ -54,7 +66,13 @@ export default function CheckoutRuntimePatch() {
     let disposed = false;
 
     // Checkout coupon/referral inputs are React-controlled fields. This helper deliberately
-    // does not intercept their clicks, keyboard events, submits, or window.fetch calls.
+    // does not intercept clicks, keyboard events, submits, or window.fetch calls.
+    const onInput = (event: Event) => {
+      if (disposed) return;
+      const input = event.target as HTMLInputElement | null;
+      if (input instanceof HTMLInputElement) saveCheckoutCode(input);
+    };
+
     const observer = new MutationObserver(() => {
       if (disposed) return;
       applyDeliveryLabels();
@@ -63,6 +81,7 @@ export default function CheckoutRuntimePatch() {
     });
 
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    document.addEventListener("input", onInput, true);
     const timer = window.setInterval(() => {
       applyDeliveryLabels();
       applySuccessButton();
@@ -74,6 +93,7 @@ export default function CheckoutRuntimePatch() {
       if (!button || !/View Order Tracking & Details|GO TO MY ORDERS/i.test(button.textContent || "")) return;
       event.preventDefault();
       event.stopPropagation();
+      try { sessionStorage.removeItem(CODE_STORAGE_KEY); } catch {}
       navigate("/shop/orders");
     };
     document.addEventListener("click", successHandler, true);
@@ -85,6 +105,7 @@ export default function CheckoutRuntimePatch() {
     return () => {
       disposed = true;
       observer.disconnect();
+      document.removeEventListener("input", onInput, true);
       window.clearInterval(timer);
       document.removeEventListener("click", successHandler, true);
     };
