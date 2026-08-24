@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { firestoreService } from "./firestoreService.js";
 
 const MID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-const MIGRATION_ID = "prime-mid-v4-read-path-self-healing";
+const MIGRATION_ID = "prime-mid-v5-read-boundary-self-healing";
 let migrationPromise: Promise<void> | null = null;
 
 export function generatePrimeMemberId(used = new Set<string>()): string {
@@ -19,9 +19,15 @@ export function isValidPrimeMemberId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Z0-9]{10}$/.test(value);
 }
 
+const rawGetDocument = firestoreService.getDocument.bind(firestoreService);
+const rawGetDocuments = firestoreService.getDocuments.bind(firestoreService);
+const rawSetDocument = firestoreService.setDocument.bind(firestoreService);
+const rawUpdateDocument = firestoreService.updateDocument.bind(firestoreService);
+const rawAddDocument = firestoreService.addDocument.bind(firestoreService);
+
 export async function ensureUniquePrimeMemberId(candidate: unknown, customerId: string): Promise<string> {
   const proposed = String(candidate || "").trim().toUpperCase();
-  const customers = await firestoreService.getDocuments("customers");
+  const customers = await rawGetDocuments("customers");
   const duplicate = proposed && customers.some((customer: any) => String(customer.id) !== customerId && String(customer.primeMemberId || "").toUpperCase() === proposed);
   if (isValidPrimeMemberId(proposed) && !duplicate) return proposed;
   const used = new Set(customers.map((customer: any) => String(customer.primeMemberId || "").toUpperCase()).filter(Boolean));
@@ -29,15 +35,15 @@ export async function ensureUniquePrimeMemberId(candidate: unknown, customerId: 
 }
 
 async function notifyMidMigration(telegramUserId: string, mid: string) {
-  const notifications = await firestoreService.getDocuments("notifications");
+  const notifications = await rawGetDocuments("notifications");
   const exists = notifications.some((n: any) =>
     String(n.telegramUserId) === telegramUserId &&
     String(n.type) === "account" &&
-    String(n.migrationVersion || "") === "v4" &&
+    String(n.migrationVersion || "") === "v5" &&
     String(n.message || "").includes(mid),
   );
   if (exists) return;
-  await firestoreService.addDocument("notifications", {
+  await rawAddDocument("notifications", {
     telegramUserId,
     title: "Your PRIME™ Member ID Has Been Migrated",
     message: `Your PRIME™ Member ID has been migrated to ${mid}. This is your new 10-character PRIME™ Member ID for future transactions and support requests.`,
@@ -45,39 +51,77 @@ async function notifyMidMigration(telegramUserId: string, mid: string) {
     iconName: "ShieldAlert",
     color: "#2563eb",
     read: false,
-    migrationVersion: "v4",
+    migrationVersion: "v5",
     createdAt: Date.now(),
   });
 }
 
-export async function ensureCustomerPrimeMemberId(customerId: string, telegramUserId?: string): Promise<string | null> {
+export async function ensureCustomerPrimeMemberId(customerId: string, telegramUserId?: string, existingCustomer?: any): Promise<string | null> {
   const id = String(customerId || "").trim();
   if (!id) return null;
-  const customer = await firestoreService.getDocument("customers", id);
+  const customer = existingCustomer || await rawGetDocument("customers", id);
   if (!customer) return null;
-
   const current = String(customer.primeMemberId || "").trim().toUpperCase();
   if (isValidPrimeMemberId(current)) return current;
 
   const next = await ensureUniquePrimeMemberId(current, id);
-  await firestoreService.updateDocument("customers", id, { primeMemberId: next, updatedAt: Date.now() });
+  await rawUpdateDocument("customers", id, { primeMemberId: next, updatedAt: Date.now() });
   await notifyMidMigration(String(telegramUserId || customer.telegramUserId || id), next);
   return next;
 }
 
+export async function repairCustomerPrimeRecord(customer: any): Promise<any> {
+  const id = String(customer?.id || customer?.telegramUserId || "").trim();
+  if (!id) return customer;
+  const mid = String(customer?.primeMemberId || "").trim().toUpperCase();
+  if (isValidPrimeMemberId(mid)) return customer;
+  const next = await ensureCustomerPrimeMemberId(id, String(customer?.telegramUserId || id), customer);
+  return next ? { ...customer, primeMemberId: next, updatedAt: Date.now() } : customer;
+}
+
+// Enforce the migration at the customer read boundary. This removes the race where
+// startup migration is still running while the UI reads the customer document.
+firestoreService.getDocument = async (collection: string, id: string) => {
+  const document = await rawGetDocument(collection, id);
+  if (collection !== "customers" || !document) return document;
+  return repairCustomerPrimeRecord(document);
+};
+
+firestoreService.getDocuments = async (collection: string, forceRefresh = false) => {
+  const documents = await rawGetDocuments(collection, forceRefresh);
+  if (collection !== "customers") return documents;
+  const repaired: any[] = [];
+  for (const customer of documents) repaired.push(await repairCustomerPrimeRecord(customer));
+  return repaired;
+};
+
+firestoreService.setDocument = async (collection: string, id: string, data: any, merge = true) => {
+  if (collection === "customers") {
+    const candidate = String(data?.primeMemberId || "").trim().toUpperCase();
+    if (!isValidPrimeMemberId(candidate)) {
+      const used = new Set((await rawGetDocuments("customers")).map((customer: any) => String(customer.primeMemberId || "").toUpperCase()).filter((value) => isValidPrimeMemberId(value)));
+      data = { ...data, primeMemberId: generatePrimeMemberId(used) };
+    }
+  }
+  return rawSetDocument(collection, id, data, merge);
+};
+
 export async function selfHealPrimeMemberIds(): Promise<void> {
   if (migrationPromise) return migrationPromise;
   migrationPromise = (async () => {
-    const customers = await firestoreService.getDocuments("customers");
+    const customers = await rawGetDocuments("customers");
+    let migratedCount = 0;
     for (const customer of customers) {
-      const customerId = String(customer.id || customer.telegramUserId || "").trim();
-      if (!customerId || isValidPrimeMemberId(String(customer.primeMemberId || "").toUpperCase())) continue;
-      await ensureCustomerPrimeMemberId(customerId, String(customer.telegramUserId || customerId));
+      const before = String(customer?.primeMemberId || "").toUpperCase();
+      if (isValidPrimeMemberId(before)) continue;
+      await repairCustomerPrimeRecord(customer);
+      migratedCount += 1;
     }
-    await firestoreService.setDocument("systemConfig", MIGRATION_ID, {
+    await rawSetDocument("systemConfig", MIGRATION_ID, {
       completedAt: Date.now(),
       customerCount: customers.length,
-      version: 4,
+      migratedCount,
+      version: 5,
     }, false);
   })().catch((error) => {
     migrationPromise = null;
@@ -85,23 +129,6 @@ export async function selfHealPrimeMemberIds(): Promise<void> {
   });
   return migrationPromise;
 }
-
-const originalSetDocument = firestoreService.setDocument.bind(firestoreService);
-firestoreService.setDocument = async (collection, id, data, merge = true) => {
-  if (collection === "customers" && data?.__skipPrimeMidUniqueness !== true) {
-    const existing = await firestoreService.getDocument("customers", id);
-    const candidate = String(data?.primeMemberId || "").trim().toUpperCase();
-    if (!existing && !isValidPrimeMemberId(candidate)) {
-      const used = new Set((await firestoreService.getDocuments("customers")).map((customer: any) => String(customer.primeMemberId || "").toUpperCase()).filter((value) => isValidPrimeMemberId(value)));
-      data = { ...data, primeMemberId: generatePrimeMemberId(used) };
-    }
-  }
-  if (data?.__skipPrimeMidUniqueness === true) {
-    const { __skipPrimeMidUniqueness: _skip, ...cleanData } = data;
-    data = cleanData;
-  }
-  return originalSetDocument(collection, id, data, merge);
-};
 
 export async function migratePrimeMemberIds(): Promise<void> {
   await selfHealPrimeMemberIds();
