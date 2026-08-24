@@ -31,6 +31,7 @@ import AdminAnalyticsPage from "./pages/admin/analytics.tsx";
 import AdminChargesPage from "./pages/admin/charges.tsx";
 import AdminDiscountsPage from "./pages/admin/discounts.tsx";
 import AdminCouponConfiguratorPage from "./pages/admin/coupon-configurator.tsx";
+import AdminReferralsPage from "./pages/admin/referrals.tsx";
 import AdminCashflowPage from "./pages/admin/cashflow.tsx";
 import AdminSupportPage from "./pages/admin/support.tsx";
 import InstallPrompt from "./components/InstallPrompt.tsx";
@@ -94,6 +95,7 @@ function AppShell() {
             <Route path="charges" element={<AdminChargesPage />} />
             <Route path="discounts" element={<AdminCouponConfiguratorPage />} />
             <Route path="coupons" element={<AdminCouponConfiguratorPage />} />
+            <Route path="referrals" element={<AdminReferralsPage />} />
             <Route path="legacy-discounts" element={<AdminDiscountsPage />} />
             <Route path="analytics" element={<AdminAnalyticsPage />} />
             <Route path="cashflow" element={<AdminCashflowPage />} />
