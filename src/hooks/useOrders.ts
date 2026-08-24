@@ -64,8 +64,33 @@ export function useOrders(telegramUserId?: string) {
 
   useEffect(() => {
     void load(false);
-    const timer = window.setInterval(() => void load(false), 5000);
-    return () => window.clearInterval(timer);
+
+    const POLL_MS = 30000;
+    let timer: number | null = null;
+
+    const schedule = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      if (document.visibilityState !== "visible") return;
+      timer = window.setTimeout(async () => {
+        await load(false);
+        schedule();
+      }, POLL_MS);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void load(false);
+      }
+      schedule();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    schedule();
+
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [load]);
 
   const createOrder = useCallback(async (orderData: Record<string, any>) => {
@@ -83,7 +108,11 @@ export function useOrders(telegramUserId?: string) {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Unable to create order");
       if (!data.order) throw new Error("Server created no order record");
-      return fromApi(data.order);
+      const created = fromApi(data.order);
+      try {
+        window.dispatchEvent(new CustomEvent("prime:order-success", { detail: { order: created } }));
+      } catch {}
+      return created;
     } catch (error: any) {
       if (error?.name === "AbortError") throw new Error("Order submission timed out. Please check your Orders tab before trying again.");
       throw error;
