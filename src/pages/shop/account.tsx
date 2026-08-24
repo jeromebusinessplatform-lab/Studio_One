@@ -2,17 +2,25 @@ import { useEffect, useState, useRef } from "react";
 import { useTelegram } from "@/context/TelegramContext.tsx";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
-import { User, Pencil } from "lucide-react";
+import { User, Pencil, UserRound } from "lucide-react";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "sonner";
 import { PrimeMemberLink } from "@/components/PrimeMemberProfile.tsx";
+
+type Referrer = {
+  telegramDisplayName: string;
+  telegramUsername: string | null;
+  primeMemberId: string;
+  vipTier: string;
+};
 
 export default function AccountPage() {
   const { customer, isAuthenticated, isTelegramEnv, error: telegramError, isLoading: isTelegramLoading } = useTelegram();
   const { customers, refresh, updateCustomerAvatar } = useCustomers();
   const { orders } = useOrders(customer?.telegramUserId);
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [referrer, setReferrer] = useState<Referrer | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -22,6 +30,18 @@ export default function AccountPage() {
     const customerRecord = customers.find((c) => c.telegramUserId === customer?.telegramUserId);
     setAvatarUrl(customerRecord?.avatarUrl || customer?.avatarUrl || "");
   }, [customers, customer]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetch("/api/account/referrer", { credentials: "same-origin", cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) return null;
+        return data.referrer || null;
+      })
+      .then((data) => setReferrer(data))
+      .catch(() => setReferrer(null));
+  }, [isAuthenticated, customer?.telegramUserId]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -100,8 +120,17 @@ export default function AccountPage() {
           <div className="flex justify-between"><span>Total Spending:</span><span className="font-bold">₱{(customerData.totalSpending || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
           <div className="flex justify-between"><span>Total Discounts Saved:</span><span className="font-bold text-emerald-600">₱{(customerData.totalDiscounts || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
           <div className="flex justify-between"><span>Referrals Made:</span><span className="font-bold">{customerData.referrals || customerData.referees?.length || 0}</span></div>
-          {customerData.referredBy && <div className="flex justify-between text-xs text-neutral-500 pt-1 border-t"><span>Referred By:</span><span className="font-mono">{customerData.referredBy}</span></div>}
         </div>
+
+        {referrer && (
+          <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm">
+            <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-neutral-500 mb-3 flex items-center gap-2"><UserRound size={14} /> Referred By</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0"><div className="font-bold text-sm truncate">{referrer.telegramDisplayName}</div><div className="text-[11px] text-neutral-500 truncate">{referrer.telegramUsername ? `@${referrer.telegramUsername}` : "Telegram handle not set"} • {referrer.vipTier}</div></div>
+              <PrimeMemberLink primeMemberId={referrer.primeMemberId} className="text-xs" />
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm">
           <h2 className="font-bold mb-3 text-sm flex items-center justify-between"><span>APPLIED DISCOUNTS & PROMOS</span><span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-normal">{(customerData.appliedDiscounts || []).length} used</span></h2>
