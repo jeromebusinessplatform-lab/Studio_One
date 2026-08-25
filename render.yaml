@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: prime-studio-one
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/geo/config
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: GEOAPIFY_API_KEY
+        sync: false
+      - key: TAGGUN_API_KEY
+        sync: false
+      - key: ADMIN_ACCESS_CODE
+        sync: false
+      - key: ADMIN_SESSION_SECRET
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
