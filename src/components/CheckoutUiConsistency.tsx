@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
+const DELIVERY_TYPES = new Set(["STANDARD", "PRIORITY", "EXPRESS"]);
+const DELIVERY_TYPE_KEY = "prime_selected_delivery_type";
+
 function textOf(element: Element | null) {
   return String(element?.textContent || "").replace(/\s+/g, " ").trim();
 }
@@ -92,11 +95,32 @@ function selectedDeliveryType(grid: HTMLElement | null) {
 
   const tier = selected.querySelector(".relative.z-10 span:first-child");
   const value = textOf(tier).toUpperCase();
-  return value === "STANDARD" || value === "EXPRESS" || value === "PRIORITY" ? value : "";
+  return DELIVERY_TYPES.has(value) ? value : "";
+}
+
+function rememberSelectedDeliveryType() {
+  const grid = findCourierGrid();
+  const type = selectedDeliveryType(grid);
+  if (type) {
+    try {
+      sessionStorage.setItem(DELIVERY_TYPE_KEY, type);
+    } catch {
+      // Ignore storage restrictions; the visible courier selector still works.
+    }
+  }
+  return type;
+}
+
+function readRememberedDeliveryType() {
+  try {
+    const value = String(sessionStorage.getItem(DELIVERY_TYPE_KEY) || "").toUpperCase();
+    return DELIVERY_TYPES.has(value) ? value : "";
+  } catch {
+    return "";
+  }
 }
 
 function updateDeliveryFeeLabel() {
-  const grid = findCourierGrid();
   const labelNodes = Array.from(document.querySelectorAll("span, div, p"));
   const label = labelNodes.find((node) => {
     const value = textOf(node).toUpperCase();
@@ -109,7 +133,7 @@ function updateDeliveryFeeLabel() {
   (row as HTMLElement).style.display = "flex";
   row.removeAttribute("data-prime-delivery-due-hidden");
 
-  const type = selectedDeliveryType(grid);
+  const type = readRememberedDeliveryType();
   label.textContent = type ? `${type} DELIVERY FEE` : "DELIVERY FEE";
 }
 
@@ -143,8 +167,11 @@ export default function CheckoutUiConsistency() {
       const target = event.target as Element | null;
       const button = target?.closest("[data-prime-courier-grid] button");
       if (!button) return;
-      window.requestAnimationFrame(apply);
-      window.setTimeout(updateDeliveryFeeLabel, 30);
+      window.requestAnimationFrame(() => {
+        rememberSelectedDeliveryType();
+        apply();
+      });
+      window.setTimeout(updateDeliveryFeeLabel, 50);
     };
 
     requestAnimationFrame(apply);
