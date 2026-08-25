@@ -1,742 +1,453 @@
-import { OrderListSkeleton } from "@/components/admin/OrderSkeleton.tsx";
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Search,
-  Package,
-  Truck,
-  Eye,
-  RefreshCw,
-  Trash2,
-  Sparkles,
-  CheckCircle2,
-  AlertTriangle,
-  FileCheck,
-  Copy,
-  Check,
-  ScanLine,
-  CreditCard,
-  Building,
-  ShieldCheck,
-  Upload,
-  TrendingUp,
-  ChevronDown,
-  ChevronUp,
   ArrowLeft,
-  Clock,
+  CalendarClock,
+  Check,
+  CheckCircle2,
+  Clock3,
+  Download,
+  Edit3,
+  Eye,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  Package,
+  RefreshCw,
+  RotateCw,
+  Search,
+  ShieldCheck,
+  Truck,
+  X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { useOrders, type CustomerOrder, type OrderStatus } from "@/hooks/useOrders.ts";
-import { AdminOverlayLoader } from "@/components/admin/AdminOverlayLoader.tsx";
-import { ReceiptOcrScanner } from "@/components/ReceiptOcrScanner.tsx";
-import { analyzeReceiptImage } from "@/lib/ocr.ts";
-import type { ReceiptOcrResult } from "@/types/ocr.ts";
-import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils.ts";
-import { SalesPerformanceChart } from "@/components/admin/SalesPerformanceChart.tsx";
+import { analyzeReceiptImage } from "@/lib/ocr.ts";
+import { toast } from "sonner";
 
-const STATUS_LABELS: Record<OrderStatus, string> = {
+const STATUS_LABELS: Record<string, string> = {
   REVIEW: "Under Review",
   PAYMENT_CONFIRMED: "Payment Confirmed",
   START_PACKING: "Packing",
-  READY: "Ready for Pickup",
+  READY: "Ready",
   AWAITING_RIDER: "Awaiting Rider",
   DISPATCHED: "Dispatched",
   DELIVERED: "Delivered",
   PAYMENT_FAILED: "Payment Failed",
   HOLD_ORDER: "On Hold",
   REQUEST_RESUBMIT: "Resubmit Required",
-  PAYMENT_CLEARED: "Payment Cleared",
-  FINAL_FOLLOW_UP: "Final Follow-up",
-  REJECTED: "Rejected",
   CANCELLED: "Cancelled",
 };
 
-const STATUS_COLORS: Record<OrderStatus, string> = {
-  REVIEW: "bg-amber-500/20 text-amber-700 border-amber-500/30",
-  PAYMENT_CONFIRMED: "bg-emerald-500/20 text-emerald-700 border-emerald-500/30",
-  START_PACKING: "bg-blue-500/20 text-blue-700 border-blue-500/30",
-  READY: "bg-teal-500/20 text-teal-700 border-teal-500/30",
-  AWAITING_RIDER: "bg-indigo-500/20 text-indigo-700 border-indigo-500/30",
-  DISPATCHED: "bg-purple-500/20 text-purple-700 border-purple-500/30",
-  DELIVERED: "bg-emerald-500/20 text-emerald-700 border-emerald-500/30",
-  PAYMENT_FAILED: "bg-rose-500/20 text-rose-700 border-rose-500/30",
-  HOLD_ORDER: "bg-orange-500/20 text-orange-700 border-orange-500/30",
-  REQUEST_RESUBMIT: "bg-yellow-500/20 text-yellow-700 border-yellow-500/30",
-  PAYMENT_CLEARED: "bg-emerald-500/20 text-emerald-700 border-emerald-500/30",
-  FINAL_FOLLOW_UP: "bg-amber-500/20 text-amber-700 border-amber-500/30",
-  REJECTED: "bg-rose-500/20 text-rose-700 border-rose-500/30",
-  CANCELLED: "bg-neutral-500/20 text-neutral-700 border-neutral-500/30",
+const STATUS_CLASSES: Record<string, string> = {
+  REVIEW: "bg-amber-50 text-amber-700 border-amber-200",
+  PAYMENT_CONFIRMED: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  START_PACKING: "bg-blue-50 text-blue-700 border-blue-200",
+  READY: "bg-teal-50 text-teal-700 border-teal-200",
+  AWAITING_RIDER: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  DISPATCHED: "bg-purple-50 text-purple-700 border-purple-200",
+  DELIVERED: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  PAYMENT_FAILED: "bg-red-50 text-red-700 border-red-200",
+  HOLD_ORDER: "bg-orange-50 text-orange-700 border-orange-200",
+  REQUEST_RESUBMIT: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  CANCELLED: "bg-neutral-100 text-neutral-600 border-neutral-200",
 };
+
+const PRIMARY_ACTIONS: Partial<Record<OrderStatus, string>> = {
+  PAYMENT_CONFIRMED: "START PACKING",
+  START_PACKING: "READY",
+  READY: "AWAITING RIDER",
+  AWAITING_RIDER: "DISPATCH",
+  DISPATCHED: "DELIVERED",
+  HOLD_ORDER: "REQUEST RESUBMIT",
+  REQUEST_RESUBMIT: "REVALIDATE",
+};
+
+function formatDateTime(timestamp: number) {
+  return new Date(timestamp).toLocaleString("en-PH", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export default function AdminOrdersPage() {
   const navigate = useNavigate();
   const {
-    allOrders: orders,
+    allOrders,
+    loading,
+    isSyncing,
+    syncOrders,
     updateOrderStatus,
     updateOrderOcr,
     updateOrderPaymentStatus,
+    editOrder,
     deleteOrder,
-    loading,
-    syncOrders,
-    isSyncing,
-    lastSyncedAt,
   } = useOrders();
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [selectedOrder, setSelectedOrder] = useState<CustomerOrder | null>(null);
-  const [isScanningOcr, setIsScanningOcr] = useState(false);
-  const [copiedRef, setCopiedRef] = useState(false);
-  const [showSalesAnalytics, setShowSalesAnalytics] = useState(true);
-  const [overlayLoading, setOverlayLoading] = useState<{
-    isVisible: boolean;
-    label: string;
-    sublabel?: string;
-  }>({
-    isVisible: false,
-    label: "",
-  });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [rescanning, setRescanning] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
-  const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
-      const matchSearch =
-        o.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
-        o.receiverName.toLowerCase().includes(search.toLowerCase()) ||
-        o.contactNumber.includes(search) ||
-        (o.telegramUsername && o.telegramUsername.toLowerCase().includes(search.toLowerCase()));
+  const orders = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return [...allOrders]
+      .filter((order) => !q || [
+        order.orderNumber,
+        order.receiverName,
+        order.contactNumber,
+        order.telegramUsername || "",
+        order.primeMemberId || "",
+      ].some((value) => String(value).toLowerCase().includes(q)))
+      .sort((a, b) => Number(a._creationTime || 0) - Number(b._creationTime || 0));
+  }, [allOrders, search]);
 
-      const matchStatus = statusFilter === "ALL" || o.orderStatus === statusFilter;
-      return matchSearch && matchStatus;
-    });
-  }, [orders, search, statusFilter]);
+  const selectedOrder = orders.find((order) => order._id === selectedId) || allOrders.find((order) => order._id === selectedId) || null;
 
-  const handleManualSync = async () => {
-    setOverlayLoading({
-      isVisible: true,
-      label: "Syncing Orders with Firestore...",
-      sublabel: "Fetching real-time order entries and payment states",
-    });
+  const runAction = async (label: string, action: () => Promise<unknown>) => {
+    if (!selectedOrder) return;
+    setBusyAction(label);
     try {
-      const synced = await syncOrders();
-      toast.success(`Successfully synced ${synced.length} orders from Firestore`);
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to sync orders with database");
+      await action();
+      toast.success(`${label} completed for #${selectedOrder.orderNumber}`);
+    } catch (error: any) {
+      toast.error(error?.message || `${label} failed`);
     } finally {
-      setOverlayLoading({ isVisible: false, label: "" });
+      setBusyAction(null);
     }
   };
 
-  const handleUpdateStatus = (orderId: string, newStatus: OrderStatus) => {
-    updateOrderStatus(orderId, newStatus);
-    toast.success(`Updated order #${selectedOrder?.orderNumber} status to ${STATUS_LABELS[newStatus]}`);
-    if (selectedOrder?._id === orderId) {
-      setSelectedOrder((prev) => (prev ? { ...prev, orderStatus: newStatus } : null));
+  const handlePrimary = async () => {
+    if (!selectedOrder) return;
+    if (selectedOrder.orderStatus === "REVIEW") {
+      setZoom(1);
+      setReviewOpen(true);
+      return;
     }
+    const next = {
+      PAYMENT_CONFIRMED: "START_PACKING",
+      START_PACKING: "READY",
+      READY: "AWAITING_RIDER",
+      AWAITING_RIDER: "DISPATCHED",
+      DISPATCHED: "DELIVERED",
+      HOLD_ORDER: "REQUEST_RESUBMIT",
+    }[selectedOrder.orderStatus] as OrderStatus | undefined;
+    if (next) await runAction(PRIMARY_ACTIONS[selectedOrder.orderStatus] || next, () => updateOrderStatus(selectedOrder._id, next));
   };
 
-  const handleAutoConfirmPayment = (order: CustomerOrder) => {
-    updateOrderPaymentStatus(order._id, "CONFIRMED", "PAYMENT_CONFIRMED");
-    toast.success(`Order #${order.orderNumber} payment confirmed via OCR verification!`);
-    if (selectedOrder?._id === order._id) {
-      setSelectedOrder((prev) =>
-        prev ? { ...prev, paymentStatus: "CONFIRMED", orderStatus: "PAYMENT_CONFIRMED" } : null
-      );
-    }
+  const handleHold = async () => {
+    if (!selectedOrder) return;
+    await runAction("HOLD", () => updateOrderStatus(selectedOrder._id, "HOLD_ORDER"));
   };
 
-  const handleScanOrderReceipt = async (order: CustomerOrder, receiptUrl: string) => {
-    setIsScanningOcr(true);
-    setOverlayLoading({
-      isVisible: true,
-      label: "Extracting Receipt OCR...",
-      sublabel: "Analyzing payment image with Gemini AI Vision",
-    });
+  const handleConfirmPayment = async () => {
+    if (!selectedOrder) return;
+    await runAction("CONFIRM PAYMENT", () => updateOrderPaymentStatus(selectedOrder._id, "CONFIRMED", "PAYMENT_CONFIRMED"));
+    setReviewOpen(false);
+  };
+
+  const handleReviewHold = async () => {
+    if (!selectedOrder) return;
+    await runAction("REQUEST RESUBMIT", () => updateOrderStatus(selectedOrder._id, "REQUEST_RESUBMIT"));
+    setReviewOpen(false);
+  };
+
+  const handleRescan = async () => {
+    if (!selectedOrder?.receiptUrl) return;
+    setRescanning(true);
     try {
-      const result = await analyzeReceiptImage(receiptUrl, {
-        expectedAmount: order.total,
+      const result = await analyzeReceiptImage(selectedOrder.receiptUrl, {
+        expectedAmount: selectedOrder.total,
         expectedReceiver: "PRIME ENTERPRISE PH",
       });
-      updateOrderOcr(order._id, result, receiptUrl);
-      if (selectedOrder?._id === order._id) {
-        setSelectedOrder((prev) => (prev ? { ...prev, receiptOcrData: result, receiptUrl } : null));
-      }
-      toast.success(`OCR Analyzed: ${result.channel} payment of ${formatCurrency(result.amount)}`);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to scan receipt with Gemini OCR");
+      await updateOrderOcr(selectedOrder._id, result, selectedOrder.receiptUrl);
+      toast.success("Receipt OCR re-scanned successfully");
+    } catch (error: any) {
+      toast.error(error?.message || "Unable to rescan receipt");
     } finally {
-      setIsScanningOcr(false);
-      setOverlayLoading({ isVisible: false, label: "" });
+      setRescanning(false);
     }
   };
 
-  const handleCopyRef = (refNo: string) => {
-    navigator.clipboard.writeText(refNo);
-    setCopiedRef(true);
-    toast.success("Reference number copied");
-    setTimeout(() => setCopiedRef(false), 2000);
-  };
-
-  const handleUpdateNotes = (orderId: string, notes: string) => {
-    updateOrderStatus(orderId, selectedOrder?.orderStatus || "REVIEW", notes);
-    if (selectedOrder?._id === orderId) {
-      setSelectedOrder((prev) => (prev ? { ...prev, adminNotes: notes } : null));
-    }
-  };
-
-  const handleDelete = (orderId: string) => {
-    deleteOrder(orderId);
-    if (selectedOrder?._id === orderId) {
-      setSelectedOrder(null);
-    }
-    toast.success("Order removed from queue");
+  const handleCancel = async () => {
+    if (!selectedOrder) return;
+    await runAction("CANCEL", () => updateOrderStatus(selectedOrder._id, "CANCELLED"));
+    setCancelOpen(false);
   };
 
   return (
-    <div className="p-3 sm:p-4 w-full max-w-full space-y-3 bg-white text-black min-h-screen">
-      <AdminOverlayLoader
-        isVisible={overlayLoading.isVisible || isSyncing}
-        label={overlayLoading.label || "Syncing Orders..."}
-        sublabel={overlayLoading.sublabel || "Fetching live data from Firestore"}
-      />
-
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 border-b border-neutral-200 pb-2.5">
+    <div className="min-h-screen bg-[#f4f5f7] text-black p-3 sm:p-4 space-y-3">
+      <div className="bg-white border border-neutral-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => navigate("/admin")}
-            className="p-1 text-neutral-500 hover:text-black rounded cursor-pointer"
-          >
+          <button type="button" onClick={() => navigate("/admin")} className="p-1.5 rounded-lg hover:bg-neutral-100" aria-label="Back">
             <ArrowLeft size={18} />
           </button>
           <div>
-            <h1
-              className="text-black text-lg sm:text-xl font-bold uppercase tracking-tight"
-              style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
-            >
-              ORDERS & DISPATCH FULFILLMENT
-            </h1>
-            <p className="text-neutral-500 text-[11px] font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-              Real-time customer orders, payment approvals, and courier dispatches
-            </p>
+            <h1 className="text-xl font-bold uppercase" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>ORDER MANAGEMENT</h1>
+            <p className="text-[11px] text-neutral-500" style={{ fontFamily: "'Ubuntu', sans-serif" }}>FIFO fulfillment queue • server-controlled workflow</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <button
-            onClick={() => setShowSalesAnalytics((prev) => !prev)}
-            className="flex items-center gap-1 bg-black hover:bg-neutral-800 text-white text-xs px-2.5 py-1.5 rounded-lg transition cursor-pointer font-normal shadow-2xs"
-            style={{ fontFamily: "'Ubuntu', sans-serif" }}
-          >
-            <TrendingUp size={12} />
-            <span>{showSalesAnalytics ? "Hide Chart" : "Sales Chart"}</span>
-            {showSalesAnalytics ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          </button>
-
-          <div className="bg-white border border-neutral-200 rounded-lg px-2.5 py-1 flex items-center gap-1.5">
-            <span className="text-neutral-500 text-xs font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Active:</span>
-            <span className="text-black font-semibold text-xs" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{orders.length}</span>
-          </div>
-
-          <button
-            onClick={handleManualSync}
-            disabled={isSyncing}
-            className="flex items-center gap-1.5 bg-black hover:bg-neutral-800 disabled:bg-neutral-400 text-white text-xs px-3 py-1.5 rounded-lg transition cursor-pointer font-medium shadow-2xs"
-            style={{ fontFamily: "'Ubuntu', sans-serif" }}
-            title={`Last synced: ${new Date(lastSyncedAt).toLocaleTimeString()}`}
-          >
-            <RefreshCw size={13} className={isSyncing ? "animate-spin" : ""} />
-            <span>{isSyncing ? "Syncing..." : "Sync Orders"}</span>
-          </button>
-        </div>
+        <button type="button" onClick={() => void syncOrders()} disabled={isSyncing} className="px-3 py-2 rounded-xl bg-black text-white text-xs font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50">
+          <RefreshCw size={13} className={isSyncing ? "animate-spin" : ""} />
+          {isSyncing ? "SYNCING" : "SYNC ORDERS"}
+        </button>
       </div>
 
-      {/* 30-Day Sales Performance Visualization */}
-      {showSalesAnalytics && (
-        <div className="transition-all duration-300">
-          <SalesPerformanceChart orders={orders} />
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <div className="bg-white border border-neutral-200 rounded-xl p-2.5 shadow-2xs">
-          <div className="text-neutral-500 text-[9px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Pending Review</div>
-          <div className="text-blue-950 text-xl font-normal mt-0.5" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-            {orders.filter((o) => o.orderStatus === "REVIEW").length}
-          </div>
-        </div>
-
-        <div className="bg-white border border-neutral-200 rounded-xl p-2.5 shadow-2xs">
-          <div className="text-neutral-500 text-[9px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>In Preparation</div>
-          <div className="text-blue-950 text-xl font-normal mt-0.5" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-            {orders.filter((o) => ["PAYMENT_CONFIRMED", "START_PACKING", "READY"].includes(o.orderStatus)).length}
-          </div>
-        </div>
-
-        <div className="bg-white border border-neutral-200 rounded-xl p-2.5 shadow-2xs">
-          <div className="text-neutral-500 text-[9px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Out for Delivery</div>
-          <div className="text-blue-950 text-xl font-normal mt-0.5" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-            {orders.filter((o) => ["AWAITING_RIDER", "DISPATCHED"].includes(o.orderStatus)).length}
-          </div>
-        </div>
-
-        <div className="bg-white border border-neutral-200 rounded-xl p-2.5 shadow-2xs">
-          <div className="text-neutral-500 text-[9px] font-normal uppercase tracking-wider" style={{ fontFamily: "'Ubuntu', sans-serif" }}>Delivered</div>
-          <div className="text-blue-950 text-xl font-normal mt-0.5" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-            {orders.filter((o) => o.orderStatus === "DELIVERED").length}
-          </div>
-        </div>
+      <div className="bg-white border border-neutral-200 rounded-2xl p-3 flex items-center gap-2">
+        <Search size={14} className="text-neutral-400" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search order, customer, phone, handle, MID..." className="w-full outline-none text-xs" />
+        <span className="text-[10px] font-mono text-neutral-400 whitespace-nowrap">{orders.length} ORDERS</span>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-2">
-        <div className="flex-1 flex items-center gap-2 bg-white border border-neutral-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
-          <Search size={14} className="text-neutral-400" />
-          <input
-            type="text"
-            placeholder="Search by order #, customer, phone, or handle..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-transparent text-xs text-black placeholder-neutral-400 outline-none font-normal"
-            style={{ fontFamily: "'Ubuntu', sans-serif" }}
-          />
-        </div>
-
-        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-          {["ALL", "REVIEW", "START_PACKING", "DISPATCHED", "DELIVERED"].map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-normal whitespace-nowrap cursor-pointer transition ${
-                statusFilter === st ? "bg-black text-white" : "bg-white text-neutral-600 hover:text-black border border-neutral-200"
-              }`}
-              style={{ fontFamily: "'Ubuntu', sans-serif" }}
-            >
-              {st}
-            </button>
-          ))}
-        </div>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <Metric label="Review" value={allOrders.filter((o) => o.orderStatus === "REVIEW").length} />
+        <Metric label="Packing" value={allOrders.filter((o) => ["PAYMENT_CONFIRMED", "START_PACKING"].includes(o.orderStatus)).length} />
+        <Metric label="Ready" value={allOrders.filter((o) => o.orderStatus === "READY").length} />
+        <Metric label="Rider" value={allOrders.filter((o) => ["AWAITING_RIDER", "DISPATCHED"].includes(o.orderStatus)).length} />
+        <Metric label="Active" value={allOrders.filter((o) => ["REVIEW", "PAYMENT_CONFIRMED", "START_PACKING", "READY", "AWAITING_RIDER"].includes(o.orderStatus)).length} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-3 relative">
-          {isSyncing && (
-            <div className="bg-neutral-900 text-white text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-between shadow-md border border-neutral-700 animate-pulse font-mono">
-              <div className="flex items-center gap-2">
-                <RefreshCw size={13} className="animate-spin text-amber-400" />
-                <span>Forced-fetching real-time order entries from Firestore...</span>
-              </div>
-              <span className="text-[10px] text-amber-300 font-semibold uppercase tracking-wider">Syncing</span>
-            </div>
-          )}
-
-          {loading || isSyncing ? (
-            <OrderListSkeleton />
-          ) : filteredOrders.length === 0 ? (
-            <div className="bg-white border border-neutral-200 rounded-2xl p-12 text-center text-neutral-400">
-              <Package size={40} className="mx-auto mb-2 opacity-30" />
-              <p className="text-sm font-normal" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-                No orders match the selected filters
-              </p>
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-3 items-start">
+        <div className="space-y-2.5">
+          {loading ? (
+            <div className="bg-white rounded-2xl border border-neutral-200 p-8 text-center text-xs text-neutral-500">Loading orders...</div>
+          ) : orders.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-neutral-200 p-8 text-center text-xs text-neutral-500">No orders found.</div>
           ) : (
-            filteredOrders.map((order) => (
-              <div
+            orders.map((order) => (
+              <button
                 key={order._id}
-                onClick={() => setSelectedOrder(order)}
-                className={`bg-white border rounded-2xl p-4 transition cursor-pointer hover:border-neutral-400 shadow-2xs ${
-                  selectedOrder?._id === order._id ? "border-black ring-1 ring-black" : "border-neutral-200"
-                }`}
+                type="button"
+                onClick={() => setSelectedId(order._id)}
+                className={`w-full text-left bg-white border rounded-2xl p-3.5 shadow-2xs transition ${selectedId === order._id ? "border-black ring-1 ring-black" : "border-neutral-200 hover:border-neutral-400"}`}
               >
-                <div className="flex items-start justify-between">
-                  <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className="text-black font-normal text-lg tracking-wider"
-                        style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
-                      >
-                        #{order.orderNumber}
-                      </span>
-                      <span
-                        className={`text-[10px] font-normal px-2 py-0.5 rounded-full border ${
-                          STATUS_COLORS[order.orderStatus]
-                        }`}
-                        style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
-                      >
-                        {STATUS_LABELS[order.orderStatus]}
-                      </span>
-
-                      {/* OCR Status Chip */}
-                      {order.receiptOcrData ? (
-                        <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                          <Sparkles size={10} className="text-emerald-600" />
-                          <span>{order.receiptOcrData.channel} OCR Verified</span>
-                        </span>
-                      ) : order.receiptUrl ? (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
-                          <FileCheck size={10} className="text-amber-600" />
-                          <span>Receipt Attached</span>
-                        </span>
-                      ) : null}
+                      <span className="font-mono font-bold text-sm">#{order.orderNumber}</span>
+                      <span className={`px-2 py-0.5 rounded-full border text-[9px] font-semibold uppercase ${STATUS_CLASSES[order.orderStatus] || "bg-neutral-100"}`}>{STATUS_LABELS[order.orderStatus] || order.orderStatus}</span>
                     </div>
-                    <div className="text-neutral-500 text-xs mt-1 font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                      {order.receiverName} {order.telegramUsername ? `(@${order.telegramUsername})` : ""}
-                    </div>
+                    <div className="text-xs mt-1 font-semibold truncate">{order.receiverName}</div>
+                    <div className="text-[10px] text-neutral-500 mt-0.5">{formatDateTime(order._creationTime)} • {order.courierName}</div>
                   </div>
-
-                  <div className="text-right">
-                    <div
-                      className="text-black font-normal text-lg"
-                      style={{ fontFamily: "'Ubuntu', sans-serif" }}
-                    >
-                      {formatCurrency(order.total)}
-                    </div>
-                    <div className="text-neutral-400 text-[11px] font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                      {new Date(order._creationTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-mono font-bold text-sm">{formatCurrency(order.total)}</div>
+                    <div className="text-[9px] text-neutral-400 font-mono">QUEUE #{order.queuePosition || "--"}</div>
                   </div>
                 </div>
-
-                <div className="mt-3 pt-3 border-t border-neutral-100 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500 font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                  <div className="flex items-center gap-1.5">
-                    <Package size={13} className="text-neutral-400" />
-                    <span>
-                      {order.items.reduce((s, i) => s + i.quantity, 0)} items ({order.items.map((i) => i.productName).join(", ")})
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1 text-neutral-700 font-normal">
-                    <Truck size={13} /> {order.courierName}
-                  </div>
+                <div className="mt-2 pt-2 border-t border-neutral-100 flex items-center justify-between text-[10px] text-neutral-500">
+                  <span className="flex items-center gap-1"><Package size={11} /> {order.items.reduce((sum, item) => sum + item.quantity, 0)} items</span>
+                  <span className="flex items-center gap-1"><CalendarClock size={11} /> FIFO {new Date(order._creationTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                 </div>
-              </div>
+              </button>
             ))
           )}
         </div>
 
-        <div className="lg:col-span-1">
-          {selectedOrder ? (
-            <div className="bg-white border border-neutral-200 rounded-2xl p-5 space-y-4 sticky top-4 shadow-xs">
-              <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-                <div>
-                  <div
-                    className="text-black font-normal text-xl"
-                    style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
-                  >
-                    #{selectedOrder.orderNumber}
-                  </div>
-                  <div className="text-xs text-neutral-500 font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                    {new Date(selectedOrder._creationTime).toLocaleString()}
-                  </div>
-                </div>
-                <span
-                  className={`text-xs font-normal px-2.5 py-1 rounded-full border ${
-                    STATUS_COLORS[selectedOrder.orderStatus]
-                  }`}
-                  style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
-                >
-                  {STATUS_LABELS[selectedOrder.orderStatus]}
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-neutral-500 text-[11px] font-normal uppercase tracking-wider mb-1.5" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                  Update Order Status
-                </label>
-                <select
-                  value={selectedOrder.orderStatus}
-                  onChange={(e) => handleUpdateStatus(selectedOrder._id, e.target.value as OrderStatus)}
-                  className="w-full bg-neutral-100 border border-neutral-300 text-neutral-900 text-xs rounded-xl px-3 py-2.5 outline-none cursor-pointer font-normal"
-                  style={{ fontFamily: "'Ubuntu', sans-serif", fontSize: "14px" }}
-                >
-                  {(Object.keys(STATUS_LABELS) as OrderStatus[]).map((st) => (
-                    <option key={st} value={st}>
-                      {STATUS_LABELS[st]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* AI Receipt & OCR Intelligence Section */}
-              <div className="space-y-2 pt-2 border-t border-neutral-100">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-normal text-neutral-400 uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-                    <Sparkles size={12} className="text-amber-500" /> Payment Slip & OCR Verification
-                  </div>
-                  {selectedOrder.receiptOcrData && (
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-mono px-2 py-0.5 rounded-full font-bold">
-                      {selectedOrder.receiptOcrData.confidenceScore}% Conf.
-                    </span>
-                  )}
-                </div>
-
-                {selectedOrder.receiptOcrData ? (
-                  <div className="bg-neutral-50 rounded-xl p-3 border border-neutral-200 text-xs space-y-2.5" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-black text-sm">
-                        {selectedOrder.receiptOcrData.channel}
-                      </span>
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                        selectedOrder.receiptOcrData.isAmountMatched ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
-                      }`}>
-                        {selectedOrder.receiptOcrData.isAmountMatched ? "✓ Amount Matched" : "⚠ Amount Difference"}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1 text-neutral-600 bg-white p-2.5 rounded-lg border border-neutral-200">
-                      <div className="flex justify-between items-center">
-                        <span className="text-neutral-400 text-[11px]">Reference No:</span>
-                        <div className="flex items-center gap-1 font-mono font-bold text-black text-xs">
-                          <span>{selectedOrder.receiptOcrData.referenceNumber}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyRef(selectedOrder.receiptOcrData!.referenceNumber)}
-                            className="text-neutral-400 hover:text-black cursor-pointer p-0.5"
-                            title="Copy Ref"
-                          >
-                            {copiedRef ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="flex justify-between">
-                        <span className="text-neutral-400 text-[11px]">Detected Amount:</span>
-                        <span className="font-mono font-bold text-black">
-                          {formatCurrency(selectedOrder.receiptOcrData.amount)}
-                        </span>
-                      </div>
-
-                      {selectedOrder.receiptOcrData.senderName && (
-                        <div className="flex justify-between">
-                          <span className="text-neutral-400 text-[11px]">Sender:</span>
-                          <span className="font-medium text-neutral-800">{selectedOrder.receiptOcrData.senderName}</span>
-                        </div>
-                      )}
-
-                      {selectedOrder.receiptOcrData.receiverName && (
-                        <div className="flex justify-between">
-                          <span className="text-neutral-400 text-[11px]">Merchant / Recipient:</span>
-                          <span className="font-medium text-neutral-800">{selectedOrder.receiptOcrData.receiverName}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Receipt Image Thumbnail if exists */}
-                    {selectedOrder.receiptUrl && (
-                      <div className="flex items-center justify-between gap-2 pt-1">
-                        <a
-                          href={selectedOrder.receiptUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-2 group cursor-pointer"
-                        >
-                          <img
-                            src={selectedOrder.receiptUrl}
-                            alt="Receipt"
-                            className="w-10 h-10 rounded-lg object-cover border border-neutral-300 group-hover:opacity-80 transition"
-                          />
-                          <span className="text-[11px] text-neutral-600 group-hover:text-black underline">
-                            View Full Slip
-                          </span>
-                        </a>
-
-                        <button
-                          type="button"
-                          disabled={isScanningOcr}
-                          onClick={() => handleScanOrderReceipt(selectedOrder, selectedOrder.receiptUrl!)}
-                          className="text-[11px] text-neutral-600 hover:text-black bg-white border border-neutral-200 px-2 py-1 rounded-lg flex items-center gap-1 cursor-pointer"
-                        >
-                          <RefreshCw size={10} className={isScanningOcr ? "animate-spin" : ""} />
-                          <span>Re-scan OCR</span>
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Quick Approve Action */}
-                    {selectedOrder.paymentStatus !== "CONFIRMED" && (
-                      <button
-                        type="button"
-                        onClick={() => handleAutoConfirmPayment(selectedOrder)}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-normal py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs transition"
-                      >
-                        <CheckCircle2 size={13} />
-                        <span>Confirm Payment (OCR Verified)</span>
-                      </button>
-                    )}
-                  </div>
-                ) : selectedOrder.receiptUrl ? (
-                  <div className="bg-neutral-50 rounded-xl p-3 border border-neutral-200 text-xs space-y-2" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-neutral-700">Receipt attached (unparsed)</span>
-                      <a
-                        href={selectedOrder.receiptUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[11px] text-neutral-500 hover:text-black underline"
-                      >
-                        View Image
-                      </a>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={isScanningOcr}
-                      onClick={() => handleScanOrderReceipt(selectedOrder, selectedOrder.receiptUrl!)}
-                      className="w-full bg-black hover:bg-neutral-800 text-white font-normal py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition"
-                    >
-                      <Sparkles size={12} className={isScanningOcr ? "animate-spin text-amber-300" : "text-amber-400"} />
-                      <span>{isScanningOcr ? "Extracting via Gemini OCR..." : "Analyze with Gemini OCR"}</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="bg-neutral-50 rounded-xl p-3 border border-dashed border-neutral-200 text-xs text-center space-y-2">
-                    <p className="text-neutral-400 text-[11px]" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                      No payment receipt attached by customer.
-                    </p>
-                    <label className="inline-flex items-center gap-1 text-[11px] bg-white border border-neutral-300 text-neutral-700 hover:text-black px-2.5 py-1 rounded-lg cursor-pointer transition">
-                      <Upload size={11} />
-                      <span>Upload Slip to Scan</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = async () => {
-                            const b64 = reader.result as string;
-                            await handleScanOrderReceipt(selectedOrder, b64);
-                          };
-                          reader.readAsDataURL(file);
-                        }}
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2 pt-2 border-t border-neutral-100">
-                <div className="text-xs font-normal text-neutral-400 uppercase tracking-wider" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-                  Customer & Delivery Details
-                </div>
-                <div className="bg-neutral-50 rounded-xl p-3 text-xs space-y-2 font-normal border border-neutral-200/80" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                  {/* Telegram / Customer Profile Info */}
-                  <div className="pb-2 border-b border-neutral-200 space-y-1 bg-white p-2 rounded-lg border border-neutral-150">
-                    <div className="text-[10px] font-bold text-neutral-400 uppercase font-mono tracking-wider">
-                      Customer Profile
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-neutral-500">Telegram Name:</span>
-                      <span className="text-black font-medium">{selectedOrder.telegramDisplayName || selectedOrder.receiverName}</span>
-                    </div>
-                    {selectedOrder.telegramUsername && (
-                      <div className="flex justify-between">
-                        <span className="text-neutral-500">Telegram Handle:</span>
-                        <span className="text-blue-600 font-mono font-medium">@{selectedOrder.telegramUsername}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span className="text-neutral-500">Telegram UID:</span>
-                      <span className="text-neutral-700 font-mono">{selectedOrder.telegramUserId || "GUEST"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-neutral-500">Prime Member ID:</span>
-                      <span className="text-neutral-950 font-mono font-bold">
-                        {selectedOrder.primeMemberId || (selectedOrder.telegramUserId ? `PC${selectedOrder.telegramUserId.slice(0, 8).toUpperCase()}` : "PC-GUEST")}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Receiver & Shipping Info */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-neutral-500">Receiver Name:</span>
-                      <span className="text-black font-bold uppercase">{selectedOrder.receiverName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-neutral-500">Contact No:</span>
-                      <span className="text-black font-mono font-medium">{selectedOrder.contactNumber}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-neutral-500">Courier:</span>
-                      <span className="text-black font-medium">{selectedOrder.courierName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-neutral-500">Payment Method:</span>
-                      <span className="text-black font-medium">{selectedOrder.paymentMethodName}</span>
-                    </div>
-                    <div className="pt-1.5 border-t border-neutral-200">
-                      <span className="text-neutral-500 block mb-0.5 font-semibold">Delivery Address:</span>
-                      <span className="text-neutral-800 leading-snug block bg-white p-2 rounded-lg border border-neutral-200 text-xs">
-                        {selectedOrder.deliveryAddress}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2 pt-2 border-t border-neutral-100">
-                <div className="text-xs font-normal text-neutral-400 uppercase tracking-wider" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-                  Ordered Items
-                </div>
-                <div className="space-y-1.5 font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                  {selectedOrder.items.map((it, idx) => (
-                    <div key={idx} className="flex justify-between text-xs py-1 border-b border-neutral-100">
-                      <span className="text-neutral-700">
-                        {it.quantity}x {it.productName}
-                      </span>
-                      <span className="text-black font-medium">{formatCurrency(it.subtotal)}</span>
-                    </div>
-                  ))}
-                  <div className="pt-2 text-xs space-y-1">
-                    <div className="flex justify-between text-neutral-500">
-                      <span>Subtotal:</span>
-                      <span>{formatCurrency(selectedOrder.subtotal)}</span>
-                    </div>
-                    <div className="flex justify-between text-neutral-500">
-                      <span>Delivery Fee:</span>
-                      <span>{formatCurrency(selectedOrder.deliveryFee)}</span>
-                    </div>
-                    <div className="flex justify-between text-black font-semibold text-sm pt-1 border-t border-neutral-200">
-                      <span>Total:</span>
-                      <span>{formatCurrency(selectedOrder.total)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-neutral-100">
-                <label className="block text-neutral-500 text-[11px] font-normal uppercase tracking-wider mb-1" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                  Internal Notes
-                </label>
-                <textarea
-                  rows={2}
-                  value={selectedOrder.adminNotes ?? ""}
-                  onChange={(e) => handleUpdateNotes(selectedOrder._id, e.target.value)}
-                  placeholder="Add notes for dispatch team..."
-                  className="w-full bg-neutral-50 border border-neutral-200 text-neutral-800 text-xs rounded-xl p-2.5 outline-none resize-none placeholder-neutral-400 font-normal"
-                  style={{ fontFamily: "'Ubuntu', sans-serif" }}
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handleDelete(selectedOrder._id)}
-                className="w-full flex items-center justify-center gap-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-xl border border-red-200 cursor-pointer transition-colors"
-                style={{ fontFamily: "'Ubuntu', sans-serif" }}
-              >
-                <Trash2 size={13} /> Remove Order
-              </button>
-            </div>
+        <div className="lg:sticky lg:top-3">
+          {!selectedOrder ? (
+            <div className="bg-white border border-neutral-200 rounded-2xl p-8 text-center text-xs text-neutral-500">Select an order to open full details.</div>
           ) : (
-            <div className="bg-white border border-neutral-200 rounded-2xl p-8 text-center text-neutral-400 shadow-2xs">
-              <Eye size={28} className="mx-auto mb-2 opacity-30" />
-              <p className="text-xs font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                Select an order from the list to review details and update its processing status.
-              </p>
+            <OrderDetail
+              order={selectedOrder}
+              busyAction={busyAction}
+              onPrimary={handlePrimary}
+              onHold={handleHold}
+              onEdit={() => setEditOpen(true)}
+              onCancel={() => setCancelOpen(true)}
+              onReview={() => { setZoom(1); setReviewOpen(true); }}
+            />
+          )}
+        </div>
+      </div>
+
+      {reviewOpen && selectedOrder && (
+        <ReceiptReviewModal
+          order={selectedOrder}
+          zoom={zoom}
+          setZoom={setZoom}
+          rescanning={rescanning}
+          onRescan={handleRescan}
+          onConfirm={handleConfirmPayment}
+          onHold={handleReviewHold}
+          onClose={() => setReviewOpen(false)}
+        />
+      )}
+
+      {editOpen && selectedOrder && (
+        <EditOrderModal
+          order={selectedOrder}
+          onClose={() => setEditOpen(false)}
+          onSave={async (details) => {
+            await runAction("EDIT ORDER", () => editOrder(selectedOrder._id, details));
+            setEditOpen(false);
+          }}
+        />
+      )}
+
+      {cancelOpen && selectedOrder && (
+        <ConfirmModal
+          title="CANCEL ORDER"
+          message={`Cancel order #${selectedOrder.orderNumber}? This will remove it from the active fulfillment queue.`}
+          confirmLabel="CANCEL ORDER"
+          onCancel={() => setCancelOpen(false)}
+          onConfirm={handleCancel}
+        />
+      )}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return <div className="bg-white border border-neutral-200 rounded-xl p-2.5"><div className="text-[9px] text-neutral-500 uppercase">{label}</div><div className="text-lg font-mono font-bold mt-0.5">{value}</div></div>;
+}
+
+function OrderDetail({ order, busyAction, onPrimary, onHold, onEdit, onCancel, onReview }: { order: CustomerOrder; busyAction: string | null; onPrimary: () => void; onHold: () => void; onEdit: () => void; onCancel: () => void; onReview: () => void }) {
+  const primaryLabel = order.orderStatus === "REVIEW" ? "REVIEW" : PRIMARY_ACTIONS[order.orderStatus] || "WORKFLOW COMPLETE";
+  const primaryDisabled = order.orderStatus === "REQUEST_RESUBMIT" || order.orderStatus === "CANCELLED" || order.orderStatus === "DELIVERED";
+  return (
+    <div className="bg-white border border-neutral-200 rounded-2xl p-4 space-y-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3 border-b border-neutral-100 pb-3">
+        <div>
+          <div className="font-mono font-bold text-lg">#{order.orderNumber}</div>
+          <div className="text-[10px] text-neutral-500">{formatDateTime(order._creationTime)}</div>
+        </div>
+        <span className={`px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase ${STATUS_CLASSES[order.orderStatus] || "bg-neutral-100"}`}>{STATUS_LABELS[order.orderStatus] || order.orderStatus}</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <Info label="TELEGRAM" value={order.telegramUsername ? `@${order.telegramUsername}` : order.telegramDisplayName || "N/A"} />
+        <Info label="PRIME MID" value={order.primeMemberId || "N/A"} mono />
+        <Info label="RECEIVER" value={order.receiverName} />
+        <Info label="CONTACT" value={order.contactNumber} mono />
+        <div className="col-span-2"><Info label="ADDRESS" value={order.deliveryAddress} /></div>
+        <Info label="COURIER" value={order.courierName} />
+        <Info label="TOTAL" value={formatCurrency(order.total)} mono />
+      </div>
+
+      <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 space-y-1.5 text-xs">
+        <div className="flex justify-between"><span className="text-neutral-500">Payment</span><strong>{order.paymentStatus}</strong></div>
+        <div className="flex justify-between"><span className="text-neutral-500">Items</span><strong>{order.items.reduce((sum, item) => sum + item.quantity, 0)}</strong></div>
+        <div className="flex justify-between"><span className="text-neutral-500">Estimated wait at order</span><strong>{order.estimatedWaitingMinutes} min</strong></div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <ActionButton label={primaryLabel} icon={<Eye size={14} />} onClick={onPrimary} disabled={primaryDisabled || !!busyAction} busy={busyAction === primaryLabel} primary />
+        <ActionButton label={order.orderStatus === "HOLD_ORDER" ? "HOLD ACTIVE" : "HOLD"} icon={<Clock3 size={14} />} onClick={onHold} disabled={order.orderStatus === "CANCELLED" || order.orderStatus === "DELIVERED" || !!busyAction} busy={busyAction === "HOLD"} />
+        <ActionButton label="EDIT" icon={<Edit3 size={14} />} onClick={onEdit} disabled={!!busyAction || order.orderStatus === "CANCELLED"} />
+        <ActionButton label="CANCEL" icon={<X size={14} />} onClick={onCancel} disabled={!!busyAction || ["CANCELLED", "DELIVERED"].includes(order.orderStatus)} danger />
+      </div>
+
+      {order.orderStatus === "REQUEST_RESUBMIT" && <div className="text-[10px] text-orange-700 bg-orange-50 border border-orange-200 rounded-xl p-2.5">REVALIDATE is intentionally disabled until a replacement receipt upload is detected.</div>}
+    </div>
+  );
+}
+
+function Info({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return <div><div className="text-[8px] text-neutral-400 uppercase tracking-wider">{label}</div><div className={`text-xs font-semibold truncate ${mono ? "font-mono" : ""}`}>{value}</div></div>;
+}
+
+function ActionButton({ label, icon, onClick, disabled, busy, primary, danger }: { label: string; icon: React.ReactNode; onClick: () => void; disabled?: boolean; busy?: boolean; primary?: boolean; danger?: boolean }) {
+  return <button type="button" onClick={onClick} disabled={disabled} className={`py-2.5 rounded-xl border text-[10px] font-bold flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${primary ? "bg-black text-white border-black" : danger ? "bg-white text-red-700 border-red-200" : "bg-white text-neutral-800 border-neutral-200"}`}>{busy ? <Loader2 size={13} className="animate-spin" /> : icon}{label}</button>;
+}
+
+function ReceiptReviewModal({ order, zoom, setZoom, rescanning, onRescan, onConfirm, onHold, onClose }: { order: CustomerOrder; zoom: number; setZoom: (value: number) => void; rescanning: boolean; onRescan: () => void; onConfirm: () => void; onHold: () => void; onClose: () => void }) {
+  const receipt = order.receiptUrl;
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/75 flex items-center justify-center p-3 sm:p-6">
+      <div className="bg-white w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl">
+        <div className="sticky top-0 z-10 bg-white border-b border-neutral-200 px-4 py-3 flex items-center justify-between">
+          <div><h2 className="font-bold uppercase text-sm">PAYMENT REVIEW • #{order.orderNumber}</h2><p className="text-[10px] text-neutral-500">Receipt verification and OCR analysis</p></div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-neutral-100"><X size={17} /></button>
+        </div>
+
+        <div className="p-4 space-y-3">
+          {!receipt ? (
+            <div className="rounded-xl border border-dashed border-neutral-300 p-10 text-center text-xs text-neutral-500"><FileText size={28} className="mx-auto mb-2 opacity-40" />No receipt uploaded.</div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <button type="button" onClick={() => setZoom(Math.max(0.7, zoom - 0.25))} className="p-1.5 border rounded-lg"><ZoomOut size={14} /></button>
+                  <button type="button" onClick={() => setZoom(Math.min(2.5, zoom + 0.25))} className="p-1.5 border rounded-lg"><ZoomIn size={14} /></button>
+                  <span className="text-[10px] font-mono text-neutral-500">{Math.round(zoom * 100)}%</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <a href={receipt} download={`receipt-${order.orderNumber}`} target="_blank" rel="noreferrer" className="px-2.5 py-1.5 rounded-lg border border-neutral-200 text-[10px] font-semibold flex items-center gap-1.5"><Download size={12} /> DOWNLOAD</a>
+                  <button type="button" onClick={onRescan} disabled={rescanning} className="px-2.5 py-1.5 rounded-lg bg-black text-white text-[10px] font-semibold flex items-center gap-1.5 disabled:opacity-50"><RotateCw size={12} className={rescanning ? "animate-spin" : ""} /> RESCAN</button>
+                </div>
+              </div>
+              <div className="bg-neutral-100 border border-neutral-200 rounded-xl overflow-auto min-h-[320px] max-h-[55vh] flex items-center justify-center p-3">
+                <img src={receipt} alt="Payment receipt" style={{ width: `${zoom * 100}%` }} className="max-w-none object-contain rounded-lg shadow-sm" />
+              </div>
+            </>
+          )}
+
+          {order.receiptOcrData && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <OcrStat label="CHANNEL" value={order.receiptOcrData.channel} />
+              <OcrStat label="AMOUNT" value={formatCurrency(order.receiptOcrData.amount)} />
+              <OcrStat label="REFERENCE" value={order.receiptOcrData.referenceNumber} mono />
+              <OcrStat label="CONFIDENCE" value={`${order.receiptOcrData.confidenceScore}%`} />
             </div>
           )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-neutral-100">
+            <ActionButton label="CONFIRM" icon={<CheckCircle2 size={14} />} onClick={onConfirm} primary />
+            <ActionButton label="HOLD" icon={<Clock3 size={14} />} onClick={onHold} />
+            <div className="hidden sm:block" />
+            <ActionButton label="CLOSE" icon={<X size={14} />} onClick={onClose} />
+          </div>
         </div>
       </div>
     </div>
   );
+}
+
+function OcrStat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-2.5"><div className="text-[8px] text-neutral-400 uppercase">{label}</div><div className={`text-xs font-bold mt-1 truncate ${mono ? "font-mono" : ""}`}>{value}</div></div>;
+}
+
+function EditOrderModal({ order, onClose, onSave }: { order: CustomerOrder; onClose: () => void; onSave: (details: Record<string, any>) => Promise<void> }) {
+  const [receiverName, setReceiverName] = useState(order.receiverName);
+  const [contactNumber, setContactNumber] = useState(order.contactNumber);
+  const [deliveryAddress, setDeliveryAddress] = useState(order.deliveryAddress);
+  const [adminNotes, setAdminNotes] = useState(order.adminNotes || "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try { await onSave({ receiverName, contactNumber, deliveryAddress, adminNotes }); } finally { setSaving(false); }
+  };
+
+  return <ModalShell title={`EDIT ORDER #${order.orderNumber}`} onClose={onClose}>
+    <div className="space-y-3">
+      <Field label="Receiver" value={receiverName} onChange={setReceiverName} />
+      <Field label="Contact" value={contactNumber} onChange={setContactNumber} />
+      <label className="block"><span className="text-[10px] font-semibold uppercase text-neutral-500">Delivery Address</span><textarea value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} rows={3} className="mt-1 w-full border rounded-xl p-2.5 text-xs outline-none" /></label>
+      <label className="block"><span className="text-[10px] font-semibold uppercase text-neutral-500">Admin Notes</span><textarea value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} rows={3} className="mt-1 w-full border rounded-xl p-2.5 text-xs outline-none" /></label>
+      <div className="flex gap-2 pt-1"><button type="button" onClick={onClose} className="flex-1 border rounded-xl py-2.5 text-xs">CLOSE</button><button type="button" onClick={() => void save()} disabled={saving} className="flex-1 bg-black text-white rounded-xl py-2.5 text-xs font-bold">{saving ? "SAVING..." : "SAVE CHANGES"}</button></div>
+    </div>
+  </ModalShell>;
+}
+
+function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="block"><span className="text-[10px] font-semibold uppercase text-neutral-500">{label}</span><input value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full border rounded-xl p-2.5 text-xs outline-none" /></label>;
+}
+
+function ModalShell({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  return <div className="fixed inset-0 z-[110] bg-black/60 flex items-center justify-center p-3"><div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"><div className="px-4 py-3 border-b flex items-center justify-between"><h3 className="font-bold text-sm uppercase">{title}</h3><button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-neutral-100"><X size={16} /></button></div><div className="p-4">{children}</div></div></div>;
+}
+
+function ConfirmModal({ title, message, confirmLabel, onCancel, onConfirm }: { title: string; message: string; confirmLabel: string; onCancel: () => void; onConfirm: () => void }) {
+  return <ModalShell title={title} onClose={onCancel}><div className="space-y-4"><p className="text-xs text-neutral-600 leading-relaxed">{message}</p><div className="flex gap-2"><button type="button" onClick={onCancel} className="flex-1 border rounded-xl py-2.5 text-xs">KEEP</button><button type="button" onClick={() => void onConfirm()} className="flex-1 bg-red-600 text-white rounded-xl py-2.5 text-xs font-bold">{confirmLabel}</button></div></div></ModalShell>;
 }
