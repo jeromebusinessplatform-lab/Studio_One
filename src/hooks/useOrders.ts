@@ -5,7 +5,7 @@ export type OrderStatus = "REVIEW" | "PAYMENT_CONFIRMED" | "START_PACKING" | "RE
 export type PaymentStatus = "PENDING" | "CONFIRMED" | "FAILED" | "CLEARED";
 export type DeliveryPaymentOption = "PAY_AT_CHECKOUT" | "PAY_UPON_FULFILLMENT";
 export interface OrderItem { productId: string; productName: string; quantity: number; unitPrice: number; subtotal: number; }
-export interface CustomerOrder { _id: string; orderNumber: string; _creationTime: number; telegramUserId?: string; telegramDisplayName?: string; telegramUsername?: string; primeMemberId?: string; items: OrderItem[]; total: number; subtotal: number; discount: number; deliveryFee: number; charges?: number; tax?: number; deliveryDueNow?: number; fulfillmentTotal?: number; receiverName: string; contactNumber: string; deliveryAddress: string; courierName: string; deliveryProviderId?: string; deliveryCharge?: number; deliveryPaymentMethod: string | DeliveryPaymentOption; paymentMethodName: string; paymentStatus: PaymentStatus; orderStatus: OrderStatus; queuePosition: number; estimatedWaitingMinutes: number; estimatedDispatchTime: string; adminNotes?: string; receiptUrl?: string; receiptOcrData?: ReceiptOcrResult; deliveryPaymentOption?: DeliveryPaymentOption; distanceKm?: number; }
+export interface CustomerOrder { _id: string; orderNumber: string; _creationTime: number; telegramUserId?: string; telegramDisplayName?: string; telegramUsername?: string; primeMemberId?: string; items: OrderItem[]; total: number; subtotal: number; discount: number; deliveryFee: number; charges?: number; tax?: number; deliveryDueNow?: number; fulfillmentTotal?: number; receiverName: string; contactNumber: string; deliveryAddress: string; courierName: string; deliveryProviderId?: string; deliveryCharge?: number; deliveryPaymentMethod: string | DeliveryPaymentOption; paymentMethodName: string; paymentStatus: PaymentStatus; orderStatus: OrderStatus; queuePosition: number; estimatedWaitingMinutes: number; estimatedDispatchTime: string; adminNotes?: string; receiptUrl?: string; receiptOcrData?: ReceiptOcrResult; deliveryPaymentOption?: DeliveryPaymentOption; distanceKm?: number; stateHistory?: Array<{ status: string; at: number }>; stateTimestamps?: Record<string, number>; }
 
 function fromApi(data: any): CustomerOrder {
   const createdAt = Number(data.createdAt || Date.now());
@@ -64,10 +64,8 @@ export function useOrders(telegramUserId?: string) {
 
   useEffect(() => {
     void load(false);
-
     const POLL_MS = 30000;
     let timer: number | null = null;
-
     const schedule = () => {
       if (timer !== null) window.clearTimeout(timer);
       if (document.visibilityState !== "visible") return;
@@ -76,17 +74,12 @@ export function useOrders(telegramUserId?: string) {
         schedule();
       }, POLL_MS);
     };
-
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void load(false);
-      }
+      if (document.visibilityState === "visible") void load(false);
       schedule();
     };
-
     document.addEventListener("visibilitychange", handleVisibility);
     schedule();
-
     return () => {
       if (timer !== null) window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", handleVisibility);
@@ -109,9 +102,7 @@ export function useOrders(telegramUserId?: string) {
       if (!response.ok) throw new Error(data.error || "Unable to create order");
       if (!data.order) throw new Error("Server created no order record");
       const created = fromApi(data.order);
-      try {
-        window.dispatchEvent(new CustomEvent("prime:order-success", { detail: { order: created } }));
-      } catch {}
+      try { window.dispatchEvent(new CustomEvent("prime:order-success", { detail: { order: created } })); } catch {}
       return created;
     } catch (error: any) {
       if (error?.name === "AbortError") throw new Error("Order submission timed out. Please check your Orders tab before trying again.");
@@ -121,16 +112,52 @@ export function useOrders(telegramUserId?: string) {
     }
   }, []);
 
-  const mutate = useCallback(async (id: string, patch: Record<string, any>) => {
-    const response = await fetch(`/api/orders/${encodeURIComponent(id)}`, { method: "PATCH", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+  const transitionOrder = useCallback(async (id: string, status: OrderStatus, adminNotes?: string) => {
+    const response = await fetch(`/api/orders/${encodeURIComponent(id)}/workflow`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, ...(adminNotes !== undefined ? { adminNotes } : {}) }),
+    });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || "Unable to update order");
+    if (!response.ok) throw new Error(data.error || "Unable to transition order");
     await load();
+    return fromApi(data.order);
   }, [load]);
 
-  const updateOrderStatus = useCallback((id: string, status: OrderStatus, notes?: string) => mutate(id, { orderStatus: status, ...(notes !== undefined ? { adminNotes: notes } : {}) }), [mutate]);
-  const updateOrderOcr = useCallback((id: string, ocrData: ReceiptOcrResult, receiptUrl?: string) => mutate(id, { receiptOcrData: ocrData, ...(receiptUrl ? { receiptUrl } : {}) }), [mutate]);
-  const updateOrderPaymentStatus = useCallback((id: string, paymentStatus: PaymentStatus, orderStatus?: OrderStatus) => mutate(id, { paymentStatus, ...(orderStatus ? { orderStatus } : {}) }), [mutate]);
+  const updateOrderStatus = useCallback((id: string, status: OrderStatus, notes?: string) => transitionOrder(id, status, notes), [transitionOrder]);
+
+  const updateOrderOcr = useCallback(async (id: string, ocrData: ReceiptOcrResult, receiptUrl?: string) => {
+    const response = await fetch(`/api/orders/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ receiptOcrData: ocrData, ...(receiptUrl ? { receiptUrl } : {}) }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Unable to save OCR result");
+    await load();
+    return fromApi(data.order);
+  }, [load]);
+
+  const updateOrderPaymentStatus = useCallback(async (id: string, paymentStatus: PaymentStatus, orderStatus?: OrderStatus) => {
+    if (!orderStatus) throw new Error("A workflow status is required for payment changes");
+    return transitionOrder(id, orderStatus, undefined);
+  }, [transitionOrder]);
+
+  const editOrder = useCallback(async (id: string, details: Record<string, any>) => {
+    const response = await fetch(`/api/orders/${encodeURIComponent(id)}/details`, {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(details),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Unable to edit order");
+    await load();
+    return fromApi(data.order);
+  }, [load]);
+
   const deleteOrder = useCallback(async (id: string) => {
     const response = await fetch(`/api/orders/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "same-origin" });
     const data = await response.json().catch(() => ({}));
@@ -139,5 +166,5 @@ export function useOrders(telegramUserId?: string) {
   }, [load]);
 
   const customerFilteredOrders = telegramUserId ? orders.filter((o) => o.telegramUserId === telegramUserId) : orders;
-  return { orders: customerFilteredOrders, allOrders: orders, loading, isSyncing, lastSyncedAt, syncOrders, refresh: load, createOrder, updateOrderStatus, updateOrderOcr, updateOrderPaymentStatus, deleteOrder };
+  return { orders: customerFilteredOrders, allOrders: orders, loading, isSyncing, lastSyncedAt, syncOrders, refresh: load, createOrder, updateOrderStatus, updateOrderOcr, updateOrderPaymentStatus, editOrder, deleteOrder };
 }
