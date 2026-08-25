@@ -310,12 +310,14 @@ export function installCheckoutRoutesV2(app: Application) {
         freeDeliveryPromo: Boolean(quote.promo?.freeDelivery),
         createdAt: now,
         updatedAt: now,
+        stateHistory: [{ status: "REVIEW", at: now }],
+        stateTimestamps: { REVIEW: now },
       };
 
       const createdOrder = await firestoreService.addDocument("orders", order);
       if (quote.promo?.code) await recordCouponRedemption(quote.promo.code, tg, String(createdOrder.id || orderNumber), quote.discount);
 
-      await firestoreService.addDocument("notifications", { telegramUserId: tg, title: `Order #${orderNumber} Placed`, message: `Your order has been received and is under review. Estimated queue waiting time: ${estimatedWaitingMinutes} mins.`, type: "order", iconName: "Clock", color: "#f97316", read: false, createdAt: now });
+      await firestoreService.addDocument("notifications", { telegramUserId: tg, title: `Order #${orderNumber} Placed`, message: `Your order has been received and is under review.`, type: "order", iconName: "Clock", color: "#f97316", read: false, createdAt: now });
 
       setTelegramSession(res, tg);
       return res.status(201).json({ order: createdOrder });
