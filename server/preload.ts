@@ -15,8 +15,9 @@ import { installReferralRoutes } from "./referralRoutes.js";
 import { installReferralGuard } from "./referralGuard.js";
 import { installQueueRoutes } from "./queueRoutes.js";
 import { installOrderWorkflowRoutes } from "./orderWorkflowRoutes.js";
+import { installOrderPatchGuardRoutes } from "./orderPatchGuardRoutes.js";
 
-export const STUDIO_ONE_SYNC_REVISION = "2026-08-25-order-queue-workflow-v1";
+export const STUDIO_ONE_SYNC_REVISION = "2026-08-25-order-queue-workflow-v2";
 
 installActivityLogger();
 installOrderNumberEnforcer();
@@ -30,6 +31,7 @@ if (!(proto as any).__primeReleaseRoutesInstalled) {
     installReferralRoutes(this);
     installCouponAdminRoutes(this);
     installCheckoutRoutesV2(this);
+    installOrderPatchGuardRoutes(this);
     installOrderWorkflowRoutes(this);
     installQueueRoutes(this);
 
