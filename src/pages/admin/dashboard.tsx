@@ -26,7 +26,7 @@ import {
   Zap,
 } from "lucide-react";
 import PrimeLogo from "@/components/PrimeLogo.tsx";
-import { useQueueStats } from "@/hooks/useQueueStats.ts";
+import { useLiveQueue } from "@/hooks/useLiveQueue.ts";
 import { useOrders } from "@/hooks/useOrders.ts";
 import { toast } from "sonner";
 
@@ -40,8 +40,13 @@ interface DiagnosticItem {
 }
 
 export default function AdminDashboardPage() {
+  console.log("AdminDashboardPage render");
+  useEffect(() => {
+    console.log("AdminDashboardPage mount");
+    return () => console.log("AdminDashboardPage unmount");
+  }, []);
   const navigate = useNavigate();
-  const { stats } = useQueueStats();
+  const { queue: liveQueue } = useLiveQueue();
   const { allOrders: orders } = useOrders();
 
   // Live real-time clock formatted exactly as "08-AUG-2026 | 11:13:57 AM"
@@ -67,13 +72,13 @@ export default function AdminDashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const queue = stats ?? {
-    onQueue: 6,
-    processing: 4,
-    estimatedWaitMinutes: 44,
-    estimatedDispatchMinutes: 21,
-    traffic: "MODERATE" as const,
-  };
+  const queue = useMemo(() => ({
+    onQueue: liveQueue.activeOrders,
+    processing: liveQueue.activeOrder ? 1 : 0, // Simplified mapping
+    estimatedWaitMinutes: liveQueue.estimatedWaitTime,
+    estimatedDispatchMinutes: liveQueue.estimatedWaitTime + 10, // Placeholder
+    traffic: liveQueue.orderTraffic,
+  }), [liveQueue]);
 
   // Full Diagnostics State
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);

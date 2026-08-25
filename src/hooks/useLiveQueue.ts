@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 
 export type LiveQueue = {
   activeOrders: number;
@@ -52,5 +52,5 @@ export function useLiveQueue() {
     };
   }, [load]);
 
-  return { queue, loading, refresh: load };
+  return useMemo(() => ({ queue, loading, refresh: load }), [queue, loading, load]);
 }

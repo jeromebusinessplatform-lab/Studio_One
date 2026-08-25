@@ -2,6 +2,7 @@ import { useLocation, useParams, Link } from "react-router-dom";
 import { CheckCircle, Clock, Truck, Hash, MapPin, Route } from "lucide-react";
 import { useEffect } from "react";
 import confetti from "canvas-confetti";
+import { motion } from "motion/react";
 
 export default function OrderConfirmationPage() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -23,7 +24,12 @@ export default function OrderConfirmationPage() {
   }, []);
 
   return (
-    <div className="bg-[#f3f4f6] min-h-full p-4">
+    <motion.div 
+      className="bg-[#f3f4f6] min-h-full p-4"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
       <div className="text-center py-6">
         <CheckCircle size={48} className="text-green-500 mx-auto mb-3" />
         <h1
@@ -169,6 +175,6 @@ export default function OrderConfirmationPage() {
           CONTINUE SHOPPING
         </Link>
       </div>
-    </div>
+    </motion.div>
   );
 }

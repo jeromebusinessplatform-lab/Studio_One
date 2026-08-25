@@ -155,7 +155,7 @@ export const firestoreService = {
     if (collection === "customers" && !skipMidUniqueness) {
       const candidate = String(incoming.primeMemberId ?? existing.primeMemberId ?? "").trim().toUpperCase();
       const customers = await this.getDocuments("customers");
-      const used = new Set(customers.filter((c: any) => String(c.id) !== id).map((c: any) => String(c.primeMemberId || "").toUpperCase()).filter(Boolean));
+      const used = new Set<string>(customers.filter((c: any) => String(c.id) !== id).map((c: any) => String(c.primeMemberId || "").toUpperCase()).filter(Boolean) as string[]);
       if (!/^[A-Z0-9]{10}$/.test(candidate) || used.has(candidate)) incoming.primeMemberId = uniqueMid(used);
       else incoming.primeMemberId = candidate;
     }

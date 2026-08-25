@@ -109,5 +109,5 @@ export function useOrders(telegramUserId?: string) {
   }, [load]);
 
   const customerFilteredOrders = telegramUserId ? orders.filter((o) => o.telegramUserId === telegramUserId) : orders;
-  return { orders: customerFilteredOrders, allOrders: orders, loading, isSyncing, lastSyncedAt, syncOrders, refresh: load, createOrder, updateOrderStatus, updateOrderOcr, updateOrderPaymentStatus, editOrder, uploadReplacementReceipt, revalidateReceipt, deleteOrder };
+  return useMemo(() => ({ orders: customerFilteredOrders, allOrders: orders, loading, isSyncing, lastSyncedAt, syncOrders, refresh: load, createOrder, updateOrderStatus, updateOrderOcr, updateOrderPaymentStatus, editOrder, uploadReplacementReceipt, revalidateReceipt, deleteOrder }), [customerFilteredOrders, orders, loading, isSyncing, lastSyncedAt, syncOrders, load, createOrder, updateOrderStatus, updateOrderOcr, updateOrderPaymentStatus, editOrder, uploadReplacementReceipt, revalidateReceipt, deleteOrder]);
 }
