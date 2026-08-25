@@ -50,7 +50,7 @@ function telegramUserId(req: Request) {
 }
 
 const TRANSITIONS: Record<string, readonly string[]> = {
-  REVIEW: ["PAYMENT_CONFIRMED", "HOLD_ORDER", "CANCELLED"],
+  REVIEW: ["PAYMENT_CONFIRMED", "HOLD_ORDER", "REQUEST_RESUBMIT", "CANCELLED"],
   PAYMENT_CONFIRMED: ["START_PACKING", "HOLD_ORDER", "CANCELLED"],
   START_PACKING: ["READY", "HOLD_ORDER", "CANCELLED"],
   READY: ["AWAITING_RIDER", "HOLD_ORDER", "CANCELLED"],
@@ -73,10 +73,7 @@ export function installOrderWorkflowRoutes(app: Application) {
       const order = await firestoreService.getDocument("orders", id);
       if (!order) return res.status(404).json({ error: "Order not found" });
       if (!isAdmin && String(order.telegramUserId || "") !== String(tg || "")) return res.status(403).json({ error: "Access denied" });
-      return res.json({
-        order,
-        transitions: isAdmin ? (TRANSITIONS[String(order.orderStatus || "")] || []) : [],
-      });
+      return res.json({ order, transitions: isAdmin ? (TRANSITIONS[String(order.orderStatus || "")] || []) : [] });
     } catch (error: any) {
       return res.status(500).json({ error: error?.message || "Unable to load order workflow" });
     }
@@ -92,48 +89,40 @@ export function installOrderWorkflowRoutes(app: Application) {
       const order = await firestoreService.getDocument("orders", id);
       if (!order) return res.status(404).json({ error: "Order not found" });
       const currentStatus = String(order.orderStatus || "REVIEW");
-      if (!transitionAllowed(currentStatus, nextStatus)) {
-        return res.status(409).json({ error: `Invalid order transition: ${currentStatus} → ${nextStatus}` });
-      }
+      if (!transitionAllowed(currentStatus, nextStatus)) return res.status(409).json({ error: `Invalid order transition: ${currentStatus} → ${nextStatus}` });
 
       const now = Date.now();
       const history = appendOrderStateHistory(order, nextStatus, now);
-      const stageTimestamps: Record<string, number> = {
-        ...(order.stateTimestamps || {}),
-        [nextStatus]: now,
-      };
-      const patch: any = {
-        orderStatus: nextStatus,
-        stateHistory: history,
-        stateTimestamps: stageTimestamps,
-        updatedAt: now,
-      };
+      const stageTimestamps: Record<string, number> = { ...(order.stateTimestamps || {}), [nextStatus]: now };
+      const patch: any = { orderStatus: nextStatus, stateHistory: history, stateTimestamps: stageTimestamps, updatedAt: now };
 
       if (nextStatus === "PAYMENT_CONFIRMED") patch.paymentStatus = "CONFIRMED";
       if (nextStatus === "REQUEST_RESUBMIT") patch.paymentStatus = "FAILED";
       if (nextStatus === "CANCELLED") patch.cancelledAt = now;
       if (nextStatus === "DISPATCHED") patch.dispatchedAt = now;
       if (nextStatus === "DELIVERED") patch.deliveredAt = now;
+      if (nextStatus === "REQUEST_RESUBMIT") patch.awaitingReceiptResubmission = true;
+      if (nextStatus === "REVIEW") patch.awaitingReceiptResubmission = false;
       if (typeof req.body?.adminNotes === "string") patch.adminNotes = req.body.adminNotes.slice(0, 500);
 
       const updated = await firestoreService.updateDocument("orders", id, patch);
-
-      if (nextStatus === "PAYMENT_CONFIRMED" || nextStatus === "START_PACKING" || nextStatus === "READY" || nextStatus === "AWAITING_RIDER" || nextStatus === "DISPATCHED" || nextStatus === "DELIVERED") {
-        const labels: Record<string, string> = {
-          PAYMENT_CONFIRMED: "Payment Confirmed",
-          START_PACKING: "Order is being packed",
-          READY: "Order is ready",
-          AWAITING_RIDER: "Awaiting Rider",
-          DISPATCHED: "Order Dispatched",
-          DELIVERED: "Order Delivered",
-        };
+      const labels: Record<string, string> = {
+        PAYMENT_CONFIRMED: "Payment Confirmed",
+        START_PACKING: "Order is being packed",
+        READY: "Order is ready",
+        AWAITING_RIDER: "Awaiting Rider",
+        DISPATCHED: "Order Dispatched",
+        DELIVERED: "Order Delivered",
+        REQUEST_RESUBMIT: "Your payment receipt needs to be submitted again.",
+      };
+      if (labels[nextStatus]) {
         await firestoreService.addDocument("notifications", {
           telegramUserId: String(order.telegramUserId || ""),
-          title: `Order #${order.orderNumber || id} Update`,
-          message: labels[nextStatus] || nextStatus,
+          title: nextStatus === "REQUEST_RESUBMIT" ? `Order #${order.orderNumber || id}: Receipt Required` : `Order #${order.orderNumber || id} Update`,
+          message: labels[nextStatus],
           type: "order",
-          iconName: "Package",
-          color: "#111827",
+          iconName: nextStatus === "REQUEST_RESUBMIT" ? "Upload" : "Package",
+          color: nextStatus === "REQUEST_RESUBMIT" ? "#f97316" : "#111827",
           read: false,
           createdAt: now,
         });
