@@ -13,8 +13,10 @@ import { installCouponAdminRoutes } from "./couponAdminRoutes.js";
 import { installCheckoutRoutesV2 } from "./checkoutRoutesV2.js";
 import { installReferralRoutes } from "./referralRoutes.js";
 import { installReferralGuard } from "./referralGuard.js";
+import { installQueueRoutes } from "./queueRoutes.js";
+import { installOrderWorkflowRoutes } from "./orderWorkflowRoutes.js";
 
-export const STUDIO_ONE_SYNC_REVISION = "2026-08-24-prime-commerce-fixes";
+export const STUDIO_ONE_SYNC_REVISION = "2026-08-25-order-queue-workflow-v1";
 
 installActivityLogger();
 installOrderNumberEnforcer();
@@ -24,13 +26,12 @@ const originalListen = proto.listen;
 if (!(proto as any).__primeReleaseRoutesInstalled) {
   proto.__primeReleaseRoutesInstalled = true;
   proto.listen = function patchedListen(this: any, ...args: any[]) {
-    // Referral validation must run before checkout handlers so invalid referrals cannot award credit.
     installReferralGuard(this);
     installReferralRoutes(this);
-
-    // Register the advanced coupon/checkout routes first so legacy handlers cannot shadow them.
     installCouponAdminRoutes(this);
     installCheckoutRoutesV2(this);
+    installOrderWorkflowRoutes(this);
+    installQueueRoutes(this);
 
     installIdentityOrderRepairRoutes(this);
     installCommerceRepairRoutes(this);
