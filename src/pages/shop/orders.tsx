@@ -1,110 +1,41 @@
-import { Package } from "lucide-react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { CheckCircle2, Clock3, ImagePlus, Package, RefreshCw, Upload, X } from "lucide-react";
 import { useTelegram } from "@/context/TelegramContext.tsx";
 import { useOrders, type CustomerOrder } from "@/hooks/useOrders.ts";
 import { formatCurrency } from "@/lib/utils.ts";
+import { toast } from "sonner";
 
-const STATUS_LABELS: Record<string, string> = {
-  REVIEW: "Under Review",
-  PAYMENT_CONFIRMED: "Payment Confirmed",
-  START_PACKING: "Packing",
-  READY: "Ready for Pickup",
-  AWAITING_RIDER: "Awaiting Rider",
-  DISPATCHED: "Dispatched",
-  DELIVERED: "Delivered",
-  PAYMENT_FAILED: "Payment Failed",
-  HOLD_ORDER: "On Hold",
-  REQUEST_RESUBMIT: "Resubmit Required",
-  PAYMENT_CLEARED: "Payment Cleared",
-  FINAL_FOLLOW_UP: "Final Follow-up",
-  REJECTED: "Rejected",
-  CANCELLED: "Cancelled",
-};
-
-const STATUS_CLASSES: Record<string, string> = {
-  REVIEW: "bg-orange-50 text-orange-700 border-orange-200",
-  PAYMENT_CONFIRMED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  START_PACKING: "bg-blue-50 text-blue-700 border-blue-200",
-  READY: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  AWAITING_RIDER: "bg-blue-50 text-blue-700 border-blue-200",
-  DISPATCHED: "bg-blue-50 text-blue-700 border-blue-200",
-  DELIVERED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  PAYMENT_FAILED: "bg-red-50 text-red-700 border-red-200",
-  HOLD_ORDER: "bg-orange-50 text-orange-700 border-orange-200",
-  REQUEST_RESUBMIT: "bg-orange-50 text-orange-700 border-orange-200",
-  PAYMENT_CLEARED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  FINAL_FOLLOW_UP: "bg-orange-50 text-orange-700 border-orange-200",
-  REJECTED: "bg-red-50 text-red-700 border-red-200",
-  CANCELLED: "bg-neutral-100 text-neutral-600 border-neutral-200",
-};
+const STATUS_LABELS: Record<string, string> = { REVIEW: "Under Review", PAYMENT_CONFIRMED: "Payment Confirmed", START_PACKING: "Packing", READY: "Ready", AWAITING_RIDER: "Awaiting Rider", DISPATCHED: "Dispatched", DELIVERED: "Delivered", HOLD_ORDER: "On Hold", REQUEST_RESUBMIT: "Receipt Resubmission Required", CANCELLED: "Cancelled" };
+const STATUS_CLASSES: Record<string, string> = { REVIEW: "bg-orange-50 text-orange-700 border-orange-200", PAYMENT_CONFIRMED: "bg-emerald-50 text-emerald-700 border-emerald-200", START_PACKING: "bg-blue-50 text-blue-700 border-blue-200", READY: "bg-teal-50 text-teal-700 border-teal-200", AWAITING_RIDER: "bg-indigo-50 text-indigo-700 border-indigo-200", DISPATCHED: "bg-purple-50 text-purple-700 border-purple-200", DELIVERED: "bg-emerald-50 text-emerald-700 border-emerald-200", HOLD_ORDER: "bg-orange-50 text-orange-700 border-orange-200", REQUEST_RESUBMIT: "bg-yellow-50 text-yellow-700 border-yellow-200", CANCELLED: "bg-neutral-100 text-neutral-600 border-neutral-200" };
 
 export default function OrdersPage() {
   const { customer } = useTelegram();
-  const { orders, loading, syncOrders } = useOrders(customer?.telegramUserId);
+  const { orders, loading, isSyncing, syncOrders, uploadReplacementReceipt } = useOrders(customer?.telegramUserId);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<CustomerOrder | null>(null);
 
-  return (
-    <div className="bg-[#f3f4f6] min-h-full pb-10">
-      <div className="bg-white border-b border-neutral-200 px-4 py-3 flex items-center justify-between">
-        <div>
-          <h1 className="text-black font-normal uppercase text-xl leading-tight" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-            MY ORDERS
-          </h1>
-          <p className="text-xs text-neutral-500 font-normal" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-            Order number, date, amount & status
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void syncOrders()}
-          className="text-xs text-black border border-neutral-200 px-3 py-1.5 rounded-lg hover:bg-neutral-50 font-normal"
-          style={{ fontFamily: "'Ubuntu', sans-serif" }}
-        >
-          REFRESH
-        </button>
-      </div>
+  const handleReceiptUpload = async (order: CustomerOrder, file: File) => {
+    if (!file.type.startsWith("image/")) { toast.error("Please select an image receipt."); return; }
+    if (file.size > 6_000_000) { toast.error("Receipt image must be 6 MB or smaller."); return; }
+    setUploadingId(order._id);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("Unable to read image")); reader.readAsDataURL(file); });
+      await uploadReplacementReceipt(order._id, dataUrl);
+      toast.success("New receipt submitted. The payment team can now revalidate it.");
+      setSelectedOrder(null);
+    } catch (error: any) { toast.error(error?.message || "Unable to submit replacement receipt"); }
+    finally { setUploadingId(null); }
+  };
 
-      {loading ? (
-        <div className="p-3 space-y-2">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-16 bg-white rounded-xl border border-neutral-200 animate-pulse" />
-          ))}
-        </div>
-      ) : orders.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-neutral-400 bg-white m-3 rounded-2xl border border-neutral-200 p-8">
-          <Package size={44} className="mb-3 opacity-30" />
-          <p className="font-normal text-neutral-700" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-            NO ORDERS FOUND
-          </p>
-          <Link to="/shop" className="mt-4 text-xs bg-black text-white font-normal px-4 py-2 rounded-xl" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-            BROWSE PRODUCTS
-          </Link>
-        </div>
-      ) : (
-        <div className="p-3">
-          <div className="bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm">
-            <div className="grid grid-cols-[1.25fr_1fr_0.9fr_1.1fr] gap-2 px-3 py-2.5 bg-neutral-50 border-b border-neutral-200 text-[9px] font-bold uppercase tracking-wider text-neutral-500" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
-              <span>Order Number</span>
-              <span>Date</span>
-              <span>Amount</span>
-              <span>Status</span>
-            </div>
-            <div className="divide-y divide-neutral-100">
-              {orders.map((order: CustomerOrder) => (
-                <div key={order._id} className="grid grid-cols-[1.25fr_1fr_0.9fr_1.1fr] gap-2 items-center px-3 py-3 text-[10px]" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                  <span className="font-mono font-bold text-neutral-900 truncate">#{order.orderNumber}</span>
-                  <span className="text-neutral-500 leading-tight">
-                    {new Date(order._creationTime).toLocaleDateString("en-PH", { month: "short", day: "2-digit", year: "numeric" })}
-                  </span>
-                  <span className="font-mono font-bold text-neutral-900">{formatCurrency(order.total)}</span>
-                  <span className={`justify-self-start max-w-full truncate border rounded-full px-2 py-1 text-[8px] font-bold uppercase ${STATUS_CLASSES[order.orderStatus] || "bg-neutral-100 text-neutral-600 border-neutral-200"}`}>
-                    {STATUS_LABELS[order.orderStatus] || order.orderStatus}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <div className="bg-[#f3f4f6] min-h-full pb-10"><div className="bg-white border-b border-neutral-200 px-4 py-3 flex items-center justify-between"><div><h1 className="text-black font-normal uppercase text-xl leading-tight" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>MY ORDERS</h1><p className="text-xs text-neutral-500">Order tracking, status & payment updates</p></div><button type="button" onClick={() => void syncOrders()} disabled={isSyncing} className="text-xs text-black border border-neutral-200 px-3 py-1.5 rounded-lg hover:bg-neutral-50 disabled:opacity-50 flex items-center gap-1.5"><RefreshCw size={12} className={isSyncing ? "animate-spin" : ""} /> REFRESH</button></div>
+    {loading ? <div className="p-3 space-y-2">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-20 bg-white rounded-xl border border-neutral-200 animate-pulse" />)}</div> : orders.length === 0 ? <div className="flex flex-col items-center justify-center py-20 text-neutral-400 bg-white m-3 rounded-2xl border border-neutral-200 p-8"><Package size={44} className="mb-3 opacity-30" /><p className="font-normal text-neutral-700">NO ORDERS FOUND</p><Link to="/shop" className="mt-4 text-xs bg-black text-white font-normal px-4 py-2 rounded-xl">BROWSE PRODUCTS</Link></div> : <div className="p-3 space-y-3">{orders.map((order: CustomerOrder) => <div key={order._id} className="bg-white rounded-2xl border border-neutral-200 overflow-hidden shadow-sm"><div className="p-3.5"><div className="flex items-start justify-between gap-3"><div><div className="font-mono font-bold text-sm">#{order.orderNumber}</div><div className="text-[10px] text-neutral-500 mt-1">{new Date(order._creationTime).toLocaleString("en-PH", { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</div></div><span className={`border rounded-full px-2 py-1 text-[8px] font-bold uppercase ${STATUS_CLASSES[order.orderStatus] || "bg-neutral-100 text-neutral-600 border-neutral-200"}`}>{STATUS_LABELS[order.orderStatus] || order.orderStatus}</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-[10px]"><div className="bg-neutral-50 rounded-xl p-2"><span className="text-neutral-400 uppercase">Amount</span><div className="font-mono font-bold text-sm mt-0.5">{formatCurrency(order.total)}</div></div><div className="bg-neutral-50 rounded-xl p-2"><span className="text-neutral-400 uppercase">Queue</span><div className="font-mono font-bold text-sm mt-0.5">{order.queuePosition ? `#${order.queuePosition}` : "--"}</div></div></div><div className="mt-3 flex items-center gap-2 text-[10px] text-neutral-500"><Clock3 size={12} /> Est. wait {order.estimatedWaitingMinutes || "--"} min</div></div>{order.orderStatus === "REQUEST_RESUBMIT" && <div className="border-t border-yellow-200 bg-yellow-50 p-3.5"><div className="flex items-start gap-2"><Upload size={15} className="text-orange-600 mt-0.5" /><div className="flex-1"><div className="text-xs font-bold uppercase text-orange-800">New payment receipt required</div><p className="text-[11px] text-orange-700 mt-1 leading-relaxed">Please upload a new receipt image so the payment team can revalidate your order.</p><button type="button" onClick={() => setSelectedOrder(order)} className="mt-2.5 w-full bg-black text-white rounded-xl py-2.5 text-xs font-bold flex items-center justify-center gap-1.5"><ImagePlus size={13} /> UPLOAD NEW RECEIPT</button></div></div></div>}</div>)}</div>}
+    {selectedOrder && <ReceiptUploadModal order={selectedOrder} busy={uploadingId === selectedOrder._id} onClose={() => !uploadingId && setSelectedOrder(null)} onSubmit={(file) => void handleReceiptUpload(selectedOrder, file)} />}
+  </div>;
+}
+
+function ReceiptUploadModal({ order, busy, onClose, onSubmit }: { order: CustomerOrder; busy: boolean; onClose: () => void; onSubmit: (file: File) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null); const [preview, setPreview] = useState<string | null>(null); const [file, setFile] = useState<File | null>(null);
+  const choose = (selected: File | undefined) => { if (!selected || !selected.type.startsWith("image/")) return; setFile(selected); const reader = new FileReader(); reader.onload = () => setPreview(String(reader.result)); reader.readAsDataURL(selected); };
+  return <div className="fixed inset-0 z-[100] bg-black/70 flex items-end sm:items-center justify-center p-3"><div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"><div className="px-4 py-3 border-b flex items-center justify-between"><div><h2 className="font-bold text-sm uppercase">RESUBMIT PAYMENT RECEIPT</h2><p className="text-[10px] text-neutral-500">Order #{order.orderNumber}</p></div><button type="button" onClick={onClose} disabled={busy} className="p-1.5 rounded-lg hover:bg-neutral-100"><X size={16} /></button></div><div className="p-4 space-y-3"><input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => choose(e.target.files?.[0])} />{preview ? <div className="rounded-xl border bg-neutral-100 p-2 max-h-72 overflow-auto"><img src={preview} alt="Receipt preview" className="w-full object-contain rounded-lg" /></div> : <button type="button" onClick={() => inputRef.current?.click()} className="w-full border-2 border-dashed border-neutral-300 rounded-2xl p-8 flex flex-col items-center gap-2 text-neutral-500"><ImagePlus size={28} /><span className="text-xs font-semibold uppercase text-black">Select receipt image</span><span className="text-[10px]">JPG, PNG, WEBP • max 6 MB</span></button>}{preview && <div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => { setFile(null); setPreview(null); if (inputRef.current) inputRef.current.value = ""; }} disabled={busy} className="border rounded-xl py-2.5 text-xs">CHOOSE AGAIN</button><button type="button" onClick={() => file && onSubmit(file)} disabled={!file || busy} className="bg-black text-white rounded-xl py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40">{busy ? "UPLOADING..." : <><CheckCircle2 size={13} /> SUBMIT RECEIPT</>}</button></div>}<p className="text-[10px] text-neutral-500 leading-relaxed">Use the original payment receipt image. The system will preserve it as the new receipt revision for admin revalidation.</p></div></div></div>;
 }
