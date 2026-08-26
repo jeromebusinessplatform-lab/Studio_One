@@ -33,20 +33,17 @@ export default function ShopLayout() {
       if (oldStatus && oldStatus !== ord.orderStatus) {
         prevMap.set(id, ord.orderStatus);
         const readableStatus = ord.orderStatus.replace(/_/g, " ");
-        toast.success(
-          `📦 Order #${ord.orderNumber} status updated to: ${readableStatus}`,
-          {
-            duration: 8000,
-            style: {
-              background: "#000",
-              color: "#fff",
-              fontSize: "12px",
-              fontWeight: 600,
-              borderRadius: "12px",
-              padding: "10px 16px",
-            },
-          }
-        );
+        toast.success(`📦 Order #${ord.orderNumber} status updated to: ${readableStatus}`, {
+          duration: 8000,
+          style: {
+            background: "#000",
+            color: "#fff",
+            fontSize: "12px",
+            fontWeight: 600,
+            borderRadius: "12px",
+            padding: "10px 16px",
+          },
+        });
       } else if (!oldStatus) {
         prevMap.set(id, ord.orderStatus);
       }
@@ -55,7 +52,7 @@ export default function ShopLayout() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-full flex items-center justify-center bg-white">
         <div className="flex flex-col items-center text-center space-y-3">
           <PrimeLogo className="h-8" />
           <Spinner />
@@ -66,20 +63,22 @@ export default function ShopLayout() {
   }
 
   return (
-    <div className="flex flex-col min-h-[100dvh] bg-[#f3f4f6] w-full relative">
-      <div className="fixed top-0 left-0 right-0 z-40 bg-white">
+    <div className="flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-[#f3f4f6]">
+      <div className="shrink-0 bg-white">
         <ShopHeader />
         <QueueStrip />
       </div>
 
-      <main className="flex-1 w-full max-w-full min-h-0 pt-[68px] pb-20">
-        <div className="w-full max-w-full">
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f3f4f6]">
+        <div className="w-full min-h-full">
           <Outlet />
         </div>
       </main>
 
-      <GlobalProprietaryFooter />
-      <BottomNav />
+      <div className="shrink-0">
+        <BottomNav />
+        <GlobalProprietaryFooter />
+      </div>
     </div>
   );
 }
