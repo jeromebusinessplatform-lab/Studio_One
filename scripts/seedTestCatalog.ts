@@ -1,4 +1,4 @@
-import { firestoreService } from "../server/firestoreService.js";
+import { supabaseService } from "../server/supabaseService.js";
 
 const REQUIRED_CONFIRMATION = "SEED_TEST_CATALOG";
 
@@ -63,11 +63,11 @@ async function main() {
   }
 
   for (const product of products) {
-    await firestoreService.setDocument("products", product.id, product, false);
+    await supabaseService.setDocument("products", product.id, product, false);
     console.log(`Seeded ${product.name} (${product.sku}) — ₱${product.price} — stock ${product.stockQuantity}`);
   }
 
-  console.log("Test catalog seed completed successfully.");
+  console.log("Test catalog seed completed successfully against Supabase.");
 }
 
 main().catch((error) => {
