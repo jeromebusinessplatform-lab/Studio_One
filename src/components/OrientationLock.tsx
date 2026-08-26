@@ -3,14 +3,6 @@ import { RotateCw, Smartphone } from "lucide-react";
 
 const PORTRAIT_WIDTH = 412;
 
-function isLikelyMobileDevice() {
-  if (typeof navigator === "undefined") return false;
-  const touch = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
-  const ua = navigator.userAgent || "";
-  const mobileUa = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
-  return mobileUa || (touch && window.innerWidth <= 1024);
-}
-
 function applyPortraitFrame() {
   const styleId = "prime-portrait-frame";
   let style = document.getElementById(styleId) as HTMLStyleElement | null;
@@ -64,15 +56,15 @@ export default function OrientationLock() {
   const [showRotatePrompt, setShowRotatePrompt] = useState(false);
 
   useEffect(() => {
-    // The previous implementation used screen.orientation.lock("portrait") and
-    // a full-screen blocker. That made browser/desktop behavior brittle.
-    // Keep the portrait-first visual layout instead of hard-locking the viewport.
+    // Keep a portrait-first presentation without locking or blocking desktop browsers.
     applyPortraitFrame();
 
     const checkOrientation = () => {
       const landscape = window.innerWidth > window.innerHeight;
-      const mobile = isLikelyMobileDevice();
-      setShowRotatePrompt(landscape && mobile);
+      // Only narrow mobile viewports get the rotation recommendation.
+      // Desktop/Chromebook/touch browsers remain fully usable.
+      const narrowViewport = window.innerWidth < 768;
+      setShowRotatePrompt(landscape && narrowViewport);
     };
 
     checkOrientation();
