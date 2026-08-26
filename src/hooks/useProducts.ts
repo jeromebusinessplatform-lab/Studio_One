@@ -1,20 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, setDoc, writeBatch } from "firebase/firestore";
+import { onSnapshot, doc, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { INITIAL_CATEGORIES, type Product, type BundleItemConfig } from "@/data/products.ts";
-
-/**
- * Removes any undefined properties from an object so Firestore does not reject the write.
- */
-function cleanPayload<T extends Record<string, any>>(obj: T): Record<string, any> {
-  const out: Record<string, any> = {};
-  for (const [key, val] of Object.entries(obj)) {
-    if (val !== undefined) {
-      out[key] = val;
-    }
-  }
-  return out;
-}
 
 function normalizeSupabaseProduct(raw: any): Product {
   const metadata = raw?.metadata && typeof raw.metadata === "object" ? raw.metadata : {};
@@ -25,6 +12,7 @@ function normalizeSupabaseProduct(raw: any): Product {
     name: String(raw?.name ?? "Untitled Product"),
     price: Number(raw?.price) || 0,
     salePrice: raw?.salePrice != null ? Number(raw.salePrice) : undefined,
+    costing: raw?.costing != null ? Number(raw.costing) : undefined,
     stock: Number.isFinite(stock) ? Math.max(0, stock) : 0,
     available: raw?.available !== false && active && stock > 0,
     category: String(raw?.category ?? metadata.category ?? "GENERAL"),
@@ -32,7 +20,7 @@ function normalizeSupabaseProduct(raw: any): Product {
     subname: raw?.subname ?? metadata.subname,
     badge: raw?.badge ?? metadata.badge,
     badgeExpiry: raw?.badgeExpiry ?? metadata.badgeExpiry,
-    image: raw?.image ?? metadata.image,
+    image: raw?.image ?? metadata.image ?? null,
     isCombination: Boolean(raw?.isCombination ?? metadata.isCombination),
     bundleItems: raw?.bundleItems ?? metadata.bundleItems,
     bundleCalculatedPrice: raw?.bundleCalculatedPrice ?? metadata.bundleCalculatedPrice,
@@ -42,64 +30,53 @@ function normalizeSupabaseProduct(raw: any): Product {
   } as Product;
 }
 
+async function requestJson(path: string, init: RequestInit = {}) {
+  const response = await fetch(path, {
+    ...init,
+    credentials: "same-origin",
+    headers: { Accept: "application/json", "Content-Type": "application/json", ...(init.headers || {}) },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || `Request failed with status ${response.status}`);
+  return payload;
+}
+
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
   const [loading, setLoading] = useState(true);
   const productsRef = useRef<Product[]>([]);
 
-  // Legacy categories listener remains temporarily during cutover.
+  // Categories remain temporarily backed by the legacy configuration document.
   useEffect(() => {
     let isMounted = true;
-
     const categoriesRef = doc(db, "config", "categories");
-    const unsubscribeCategories = onSnapshot(
+    const unsubscribe = onSnapshot(
       categoriesRef,
       (docSnap) => {
         if (!isMounted) return;
-        if (docSnap.exists()) {
-          const list = docSnap.data().list;
-          if (Array.isArray(list) && list.length > 0) {
-            setCategories(list);
-          } else {
-            setCategories(INITIAL_CATEGORIES);
-          }
-        } else {
-          setCategories(INITIAL_CATEGORIES);
-        }
+        const list = docSnap.exists() ? docSnap.data().list : null;
+        setCategories(Array.isArray(list) && list.length > 0 ? list : INITIAL_CATEGORIES);
       },
       (error) => {
         console.error("Categories listener error:", error);
         if (isMounted) setCategories(INITIAL_CATEGORIES);
-      }
+      },
     );
-
     return () => {
       isMounted = false;
-      unsubscribeCategories();
+      unsubscribe();
     };
   }, []);
 
-  // Supabase is now the authoritative product/inventory read source.
-  // Polling keeps the public catalog aligned with the same source Cart/Checkout validate against.
+  // Supabase is the single product/inventory authority for catalog and admin UI.
   useEffect(() => {
     let isMounted = true;
-
-    const refreshFromSupabase = async () => {
+    const refresh = async () => {
       try {
-        const response = await fetch("/api/products", {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          throw new Error(`Supabase product API returned ${response.status}`);
-        }
-
-        const payload = await response.json();
-        const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.products) ? payload.products : [];
+        const payload = await requestJson("/api/products", { method: "GET", cache: "no-store" });
+        const rows = Array.isArray(payload?.products) ? payload.products : Array.isArray(payload) ? payload : [];
         const data = rows.map(normalizeSupabaseProduct);
-
         if (!isMounted) return;
         if (JSON.stringify(data) !== JSON.stringify(productsRef.current)) {
           setProducts(data);
@@ -111,139 +88,57 @@ export function useProducts() {
         if (isMounted) setLoading(false);
       }
     };
-
-    void refreshFromSupabase();
-
+    void refresh();
     const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void refreshFromSupabase();
-      }
+      if (document.visibilityState === "visible") void refresh();
     }, 5000);
-
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void refreshFromSupabase();
-      }
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void refresh();
     };
-    document.addEventListener("visibilitychange", handleVisibility);
-
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       isMounted = false;
       window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibility);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
   const addProduct = async (newProd: Omit<Product, "_id">) => {
-    const cleaned = cleanPayload(newProd);
-    const docRef = await addDoc(collection(db, "products"), cleaned);
-    return docRef.id;
+    const payload = await requestJson("/api/admin/products", { method: "POST", body: JSON.stringify(newProd) });
+    return String(payload?.product?._id ?? payload?.product?.id ?? "");
   };
 
   const updateProduct = async (id: string, updates: Partial<Product>) => {
-    const { _id, ...rest } = updates as any;
-    const cleaned = cleanPayload(rest);
-    await updateDoc(doc(db, "products", id), cleaned);
+    await requestJson(`/api/admin/products/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(updates) });
   };
 
   const removeProduct = async (id: string) => {
-    await deleteDoc(doc(db, "products", id));
+    await requestJson(`/api/admin/products/${encodeURIComponent(id)}`, { method: "DELETE" });
   };
 
   const batchDeleteProducts = useCallback(async (ids: string[]) => {
     if (!ids.length) return;
-    setProducts((prev) => prev.filter((p) => !ids.includes(p._id)));
-    try {
-      const res = await fetch("/api/admin/batch-delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ collection: "products", ids }),
-      });
-      if (!res.ok) {
-        const batch = writeBatch(db);
-        ids.forEach((id) => {
-          batch.delete(doc(db, "products", id));
-        });
-        await batch.commit();
-      }
-    } catch {
-      try {
-        const batch = writeBatch(db);
-        ids.forEach((id) => {
-          batch.delete(doc(db, "products", id));
-        });
-        await batch.commit();
-      } catch (err) {
-        console.error("batchDeleteProducts fallback error:", err);
-      }
-    }
+    await requestJson("/api/admin/products/batch", { method: "POST", body: JSON.stringify({ action: "delete", ids }) });
   }, []);
 
   const batchUpdateCategory = useCallback(async (ids: string[], newCategory: string) => {
     if (!ids.length || !newCategory) return;
-    try {
-      const batch = writeBatch(db);
-      ids.forEach((id) => {
-        batch.update(doc(db, "products", id), { category: newCategory });
-      });
-      await batch.commit();
-    } catch {
-      await fetch("/api/admin/products/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ action: "update_category", ids, category: newCategory }),
-      });
-    }
+    await requestJson("/api/admin/products/batch", { method: "POST", body: JSON.stringify({ action: "update_category", ids, category: newCategory }) });
   }, []);
 
   const batchSetAvailability = useCallback(async (ids: string[], available: boolean) => {
     if (!ids.length) return;
-    try {
-      const batch = writeBatch(db);
-      ids.forEach((id) => {
-        batch.update(doc(db, "products", id), {
-          available,
-          ...(available ? {} : { stock: 0 }),
-        });
-      });
-      await batch.commit();
-    } catch {
-      await fetch("/api/admin/products/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ action: "set_availability", ids, available }),
-      });
-    }
+    await requestJson("/api/admin/products/batch", { method: "POST", body: JSON.stringify({ action: "set_availability", ids, available }) });
   }, []);
 
   const batchSetBadge = useCallback(async (ids: string[], badge: string, badgeExpiry?: string) => {
     if (!ids.length) return;
-    try {
-      const batch = writeBatch(db);
-      ids.forEach((id) => {
-        batch.update(doc(db, "products", id), {
-          badge: badge || null,
-          badgeExpiry: badgeExpiry || null,
-        });
-      });
-      await batch.commit();
-    } catch {
-      await fetch("/api/admin/products/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ action: "set_badge", ids, badge, badgeExpiry }),
-      });
-    }
+    await requestJson("/api/admin/products/batch", { method: "POST", body: JSON.stringify({ action: "set_badge", ids, badge, badgeExpiry }) });
   }, []);
 
   const addCategory = useCallback(async (newCategory: string) => {
     const trimmed = newCategory.trim();
     if (!trimmed) return false;
-
     const newCategories = [...categories.filter((c) => c !== trimmed), trimmed];
     await setDoc(doc(db, "config", "categories"), { list: newCategories });
     return true;
@@ -252,49 +147,32 @@ export function useProducts() {
   const editCategory = useCallback(async (oldCategory: string, newCategory: string) => {
     const trimmedNew = newCategory.trim();
     if (!trimmedNew || oldCategory === trimmedNew) return false;
-
     const newCategories = categories.map((c) => (c === oldCategory ? trimmedNew : c));
     await setDoc(doc(db, "config", "categories"), { list: newCategories });
-
-    for (const p of products) {
-      if (p.category === oldCategory) {
-        await updateDoc(doc(db, "products", p._id), { category: trimmedNew });
-      }
-    }
+    const affected = products.filter((p) => p.category === oldCategory).map((p) => p._id);
+    await batchUpdateCategory(affected, trimmedNew);
     return true;
-  }, [categories, products]);
+  }, [categories, products, batchUpdateCategory]);
 
   const removeCategory = useCallback(async (categoryToRemove: string, fallback = "General") => {
     const newCategories = categories.filter((c) => c !== categoryToRemove);
     await setDoc(doc(db, "config", "categories"), { list: newCategories });
-
-    for (const p of products) {
-      if (p.category === categoryToRemove) {
-        await updateDoc(doc(db, "products", p._id), { category: fallback });
-      }
-    }
+    const affected = products.filter((p) => p.category === categoryToRemove).map((p) => p._id);
+    await batchUpdateCategory(affected, fallback);
     return true;
-  }, [categories, products]);
+  }, [categories, products, batchUpdateCategory]);
 
-  const computeBundlePrice = useCallback(
-    (bundleItems: BundleItemConfig[] = []): number => {
-      let total = 0;
-      for (const item of bundleItems) {
-        const prod = products.find((p) => p._id === item.productId);
-        if (!prod) continue;
-        const originalPrice = prod.salePrice ?? prod.price;
-        if (item.pricingType === "fixed") {
-          total += typeof item.customPrice === "number" ? item.customPrice : originalPrice;
-        } else if (item.pricingType === "percentage_off") {
-          const pct = item.discountPercent ?? 0;
-          const discounted = originalPrice * (1 - pct / 100);
-          total += Math.max(0, discounted);
-        }
-      }
-      return Math.round(total * 100) / 100;
-    },
-    [products]
-  );
+  const computeBundlePrice = useCallback((bundleItems: BundleItemConfig[] = []): number => {
+    let total = 0;
+    for (const item of bundleItems) {
+      const prod = products.find((p) => p._id === item.productId);
+      if (!prod) continue;
+      const originalPrice = prod.salePrice ?? prod.price;
+      if (item.pricingType === "fixed") total += typeof item.customPrice === "number" ? item.customPrice : originalPrice;
+      else if (item.pricingType === "percentage_off") total += Math.max(0, originalPrice * (1 - (item.discountPercent ?? 0) / 100));
+    }
+    return Math.round(total * 100) / 100;
+  }, [products]);
 
   return {
     products,
