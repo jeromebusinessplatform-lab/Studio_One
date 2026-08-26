@@ -1,45 +1,97 @@
 import { useEffect, useState } from "react";
 import { RotateCw, Smartphone } from "lucide-react";
 
-export default function OrientationLock() {
-  const [isLandscape, setIsLandscape] = useState(false);
+const PORTRAIT_WIDTH = 412;
 
-  useEffect(() => {
-    try {
-      const screenObj = window.screen as unknown as { orientation?: { lock?: (mode: string) => Promise<void> } };
-      if (screenObj.orientation?.lock) {
-        screenObj.orientation.lock("portrait").catch(() => {});
-      }
-    } catch {
-      // Ignore unsupported browsers
+function isLikelyMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  const touch = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+  const ua = navigator.userAgent || "";
+  const mobileUa = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  return mobileUa || (touch && window.innerWidth <= 1024);
+}
+
+function applyPortraitFrame() {
+  const styleId = "prime-portrait-frame";
+  let style = document.getElementById(styleId) as HTMLStyleElement | null;
+  if (!style) {
+    style = document.createElement("style");
+    style.id = styleId;
+    document.head.appendChild(style);
+  }
+
+  style.textContent = `
+    :root { --prime-portrait-width: ${PORTRAIT_WIDTH}px; }
+
+    body.prime-portrait-host {
+      min-height: 100dvh;
+      margin: 0;
+      background: #111827;
     }
 
-    const checkOrientation = () => {
-      const isWindowLandscape = window.innerWidth > window.innerHeight;
-      const isMobileSize = window.innerHeight < 650 || window.innerWidth < 1024;
-      const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-      if (isWindowLandscape && (isMobileSize || isTouch)) {
-        setIsLandscape(true);
-      } else {
-        setIsLandscape(false);
+    body.prime-portrait-host #root {
+      width: 100%;
+      min-height: 100dvh;
+      margin: 0 auto;
+      background: #f3f4f6;
+    }
+
+    @media (min-width: 768px) {
+      body.prime-portrait-host #root {
+        width: min(var(--prime-portrait-width), calc(100vw - 32px));
+        min-height: 100dvh;
+        box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 18px 50px rgba(0,0,0,.28);
       }
+    }
+
+    @media (max-width: 767px) {
+      body.prime-portrait-host #root {
+        width: 100%;
+        box-shadow: none;
+      }
+    }
+  `;
+
+  document.body.classList.add("prime-portrait-host");
+}
+
+function removePortraitFrame() {
+  document.body.classList.remove("prime-portrait-host");
+  document.getElementById("prime-portrait-frame")?.remove();
+}
+
+export default function OrientationLock() {
+  const [showRotatePrompt, setShowRotatePrompt] = useState(false);
+
+  useEffect(() => {
+    // The previous implementation used screen.orientation.lock("portrait") and
+    // a full-screen blocker. That made browser/desktop behavior brittle.
+    // Keep the portrait-first visual layout instead of hard-locking the viewport.
+    applyPortraitFrame();
+
+    const checkOrientation = () => {
+      const landscape = window.innerWidth > window.innerHeight;
+      const mobile = isLikelyMobileDevice();
+      setShowRotatePrompt(landscape && mobile);
     };
 
     checkOrientation();
     window.addEventListener("resize", checkOrientation);
     window.addEventListener("orientationchange", checkOrientation);
+
     return () => {
       window.removeEventListener("resize", checkOrientation);
       window.removeEventListener("orientationchange", checkOrientation);
+      removePortraitFrame();
     };
   }, []);
 
-  if (!isLandscape) return null;
+  if (!showRotatePrompt) return null;
 
   return (
     <div
-      id="orientation-lock-screen"
-      className="fixed inset-0 z-[100000] bg-black/95 text-white flex flex-col items-center justify-center p-6 text-center backdrop-blur-md animate-fade-in select-none"
+      id="orientation-prompt"
+      className="fixed inset-0 z-[100000] bg-black/90 text-white flex flex-col items-center justify-center p-6 text-center backdrop-blur-md animate-fade-in select-none"
     >
       <div className="relative mb-6 flex items-center justify-center">
         <div className="w-20 h-20 rounded-2xl bg-neutral-900 border border-neutral-700 flex items-center justify-center shadow-2xl">
@@ -53,21 +105,20 @@ export default function OrientationLock() {
         className="text-white text-xl font-normal uppercase tracking-wider mb-2"
         style={{ fontFamily: "'Roboto Condensed', sans-serif" }}
       >
-        PORTRAIT ORIENTATION ONLY
+        PORTRAIT VIEW RECOMMENDED
       </h2>
       <p
         className="text-neutral-400 text-sm max-w-xs leading-relaxed font-normal mb-4"
         style={{ fontFamily: "'Ubuntu', sans-serif", fontSize: "14px" }}
       >
-        PRIME is strictly optimized for portrait mobile display (412 × 915 dp).
-        Please rotate your device to portrait mode to continue.
+        PRIME is optimized for a 412 × 915 portrait layout. Rotate your mobile device for the best experience.
       </p>
       <div
         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-800 border border-neutral-700 text-neutral-300 text-xs font-normal"
         style={{ fontFamily: "'Ubuntu', sans-serif" }}
       >
         <span className="w-2 h-2 rounded-full bg-green-500 animate-ping" />
-        LOCKED TO 412 × 915 DP PORTRAIT
+        PORTRAIT-FIRST LAYOUT
       </div>
     </div>
   );
