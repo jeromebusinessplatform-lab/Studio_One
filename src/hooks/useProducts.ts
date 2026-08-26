@@ -17,17 +17,42 @@ function cleanPayload<T extends Record<string, any>>(obj: T): Record<string, any
   return out;
 }
 
+function normalizeSupabaseProduct(raw: any): Product {
+  const metadata = raw?.metadata && typeof raw.metadata === "object" ? raw.metadata : {};
+  const stock = Number(raw?.stock ?? raw?.stockQuantity ?? raw?.stock_quantity ?? 0);
+  const active = raw?.active !== false;
+  return {
+    _id: String(raw?._id ?? raw?.id ?? metadata.externalId ?? ""),
+    name: String(raw?.name ?? "Untitled Product"),
+    price: Number(raw?.price) || 0,
+    salePrice: raw?.salePrice != null ? Number(raw.salePrice) : undefined,
+    stock: Number.isFinite(stock) ? Math.max(0, stock) : 0,
+    available: raw?.available !== false && active && stock > 0,
+    category: String(raw?.category ?? metadata.category ?? "GENERAL"),
+    description: raw?.description ?? metadata.description ?? "",
+    subname: raw?.subname ?? metadata.subname,
+    badge: raw?.badge ?? metadata.badge,
+    badgeExpiry: raw?.badgeExpiry ?? metadata.badgeExpiry,
+    image: raw?.image ?? metadata.image,
+    isCombination: Boolean(raw?.isCombination ?? metadata.isCombination),
+    bundleItems: raw?.bundleItems ?? metadata.bundleItems,
+    bundleCalculatedPrice: raw?.bundleCalculatedPrice ?? metadata.bundleCalculatedPrice,
+    allowComparison: raw?.allowComparison ?? metadata.allowComparison ?? true,
+    sku: raw?.sku ?? metadata.sku,
+    sortOrder: raw?.sortOrder ?? metadata.sortOrder,
+  } as Product;
+}
+
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
   const [loading, setLoading] = useState(true);
   const productsRef = useRef<Product[]>([]);
 
-  // Load products and categories from Firestore
+  // Legacy categories listener remains temporarily during cutover.
   useEffect(() => {
     let isMounted = true;
 
-    // Categories
     const categoriesRef = doc(db, "config", "categories");
     const unsubscribeCategories = onSnapshot(
       categoriesRef,
@@ -49,60 +74,64 @@ export function useProducts() {
         if (isMounted) setCategories(INITIAL_CATEGORIES);
       }
     );
-    
-    // Products
-    const q = query(collection(db, "products"));
-    const unsubscribeProducts = onSnapshot(
-      q,
-      async (snapshot) => {
-        if (!isMounted) return;
-        
-        // ... (existing seeding logic)
-        if (snapshot.empty) {
-            // ... (existing seeding logic)
-            if (isMounted) {
-                setProducts(INITIAL_PRODUCTS);
-                productsRef.current = INITIAL_PRODUCTS;
-                setLoading(false);
-            }
-            return;
-        }
-
-        const data = snapshot.docs.map((docSnap) => {
-          const raw = docSnap.data();
-          console.log("Firestore Product Data:", docSnap.id, raw);
-          return {
-            _id: docSnap.id,
-            name: raw.name || "Untitled Product",
-            price: Number(raw.price) || 0,
-            stock: Number(raw.stock) || 0,
-            available: raw.available !== false,
-            ...raw,
-          } as Product;
-        });
-
-        if (isMounted) {
-            if (JSON.stringify(data) !== JSON.stringify(productsRef.current)) {
-              setProducts(data);
-              productsRef.current = data;
-            }
-            setLoading(false);
-            // saveProducts(data).catch(console.error);
-        }
-      },
-      (error) => {
-        console.error("Products listener error:", error);
-        if (isMounted) {
-          setProducts((prev) => (prev.length > 0 ? prev : INITIAL_PRODUCTS));
-          setLoading(false);
-        }
-      }
-    );
 
     return () => {
       isMounted = false;
-      unsubscribeProducts();
       unsubscribeCategories();
+    };
+  }, []);
+
+  // Supabase is now the authoritative product/inventory read source.
+  // Polling keeps the public catalog aligned with the same source Cart/Checkout validate against.
+  useEffect(() => {
+    let isMounted = true;
+
+    const refreshFromSupabase = async () => {
+      try {
+        const response = await fetch("/api/products", {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          throw new Error(`Supabase product API returned ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.products) ? payload.products : [];
+        const data = rows.map(normalizeSupabaseProduct);
+
+        if (!isMounted) return;
+        if (JSON.stringify(data) !== JSON.stringify(productsRef.current)) {
+          setProducts(data);
+          productsRef.current = data;
+        }
+      } catch (error) {
+        console.error("Supabase products refresh error:", error);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    void refreshFromSupabase();
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshFromSupabase();
+      }
+    }, 5000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void refreshFromSupabase();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
@@ -212,11 +241,10 @@ export function useProducts() {
     }
   }, []);
 
-  // Category Management Handlers
   const addCategory = useCallback(async (newCategory: string) => {
     const trimmed = newCategory.trim();
     if (!trimmed) return false;
-    
+
     const newCategories = [...categories.filter((c) => c !== trimmed), trimmed];
     await setDoc(doc(db, "config", "categories"), { list: newCategories });
     return true;
@@ -229,7 +257,6 @@ export function useProducts() {
     const newCategories = categories.map((c) => (c === oldCategory ? trimmedNew : c));
     await setDoc(doc(db, "config", "categories"), { list: newCategories });
 
-    // Cascade update all products in this category
     for (const p of products) {
       if (p.category === oldCategory) {
         await updateDoc(doc(db, "products", p._id), { category: trimmedNew });
@@ -242,7 +269,6 @@ export function useProducts() {
     const newCategories = categories.filter((c) => c !== categoryToRemove);
     await setDoc(doc(db, "config", "categories"), { list: newCategories });
 
-    // Reassign products to fallback
     for (const p of products) {
       if (p.category === categoryToRemove) {
         await updateDoc(doc(db, "products", p._id), { category: fallback });
@@ -251,7 +277,6 @@ export function useProducts() {
     return true;
   }, [categories, products]);
 
-  // Helper to compute bundle prices based on included items
   const computeBundlePrice = useCallback(
     (bundleItems: BundleItemConfig[] = []): number => {
       let total = 0;
@@ -289,4 +314,3 @@ export function useProducts() {
     computeBundlePrice,
   };
 }
-
