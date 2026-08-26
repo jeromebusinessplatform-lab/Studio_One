@@ -62,20 +62,20 @@ export default function BottomNav() {
   ];
 
   return (
-    <nav className="w-full shrink-0 bg-white border-t border-neutral-200 z-40 shadow-lg">
-      <div className="flex items-center justify-around h-10 px-2 w-full max-w-full mx-auto">
+    <nav className="relative z-[70] pointer-events-auto w-full shrink-0 bg-white border-t border-neutral-200 shadow-lg">
+      <div className="relative z-[71] flex items-center justify-around h-10 px-2 w-full max-w-full mx-auto pointer-events-auto">
         {navItems.map(({ href, icon: Icon, badge }) => {
           const isActive = path === href || (href !== "/shop" && path.startsWith(href));
           const isCart = href === "/shop/cart";
           const isAlerts = href === "/shop/notifications";
           return (
-            <Link key={href} to={href} className={`flex flex-col items-center justify-center flex-1 h-full relative cursor-pointer transition-colors ${isActive ? "text-black font-bold" : "text-neutral-600 hover:text-black"}`}>
-              <div className="relative flex items-center justify-center">
+            <Link key={href} to={href} aria-label={label} className={`relative z-[72] pointer-events-auto flex flex-col items-center justify-center flex-1 h-full cursor-pointer touch-manipulation select-none transition-colors ${isActive ? "text-black font-bold" : "text-neutral-600 hover:text-black"}`}>
+              <div className="relative flex items-center justify-center pointer-events-none">
                 <motion.div animate={isCart || isAlerts ? controls : {}}>
                   <Icon size={20.5} className={`transition-transform duration-150 ${isActive ? "stroke-[2.5] scale-105 text-black" : "stroke-[1.75] text-neutral-700"}`} />
                 </motion.div>
                 {badge !== undefined && badge > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 bg-[#ef4444] text-white text-[10px] font-black rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center leading-none shadow-xs border border-white" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
+                  <span className="absolute -top-1.5 -right-2.5 bg-[#ef4444] text-white text-[10px] font-black rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center leading-none shadow-xs border border-white pointer-events-none" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
                     {badge > 99 ? "99+" : badge}
                   </span>
                 )}
