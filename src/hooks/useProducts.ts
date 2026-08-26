@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { collection, onSnapshot, query, doc, addDoc, updateDoc, deleteDoc, setDoc, writeBatch } from "firebase/firestore";
+import { collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, setDoc, writeBatch } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, type Product, type BundleItemConfig } from "@/data/products.ts";
-import { saveProducts, getProducts } from "@/lib/db";
+import { INITIAL_CATEGORIES, type Product, type BundleItemConfig } from "@/data/products.ts";
 
 /**
  * Removes any undefined properties from an object so Firestore does not reject the write.
