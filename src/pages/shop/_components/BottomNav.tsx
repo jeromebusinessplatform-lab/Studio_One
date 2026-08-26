@@ -64,7 +64,7 @@ export default function BottomNav() {
   return (
     <nav className="relative z-[70] pointer-events-auto w-full shrink-0 bg-white border-t border-neutral-200 shadow-lg">
       <div className="relative z-[71] flex items-center justify-around h-10 px-2 w-full max-w-full mx-auto pointer-events-auto">
-        {navItems.map(({ href, icon: Icon, badge }) => {
+        {navItems.map(({ href, icon: Icon, label, badge }) => {
           const isActive = path === href || (href !== "/shop" && path.startsWith(href));
           const isCart = href === "/shop/cart";
           const isAlerts = href === "/shop/notifications";
