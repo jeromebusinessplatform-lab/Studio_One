@@ -102,7 +102,7 @@ export default function AccountPage() {
     telegramUserId: customer.telegramUserId,
     telegramDisplayName: customer.telegramDisplayName,
     telegramUsername: customer.telegramUsername,
-    primeMemberId: "—",
+    primeMemberId: customer.primeMemberId || "—",
     vipTier: "Bronze" as const,
     points: 0,
     memberSince: Date.now(),
