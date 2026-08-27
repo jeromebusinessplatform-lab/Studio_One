@@ -149,6 +149,21 @@ function alignCodeFields() {
   el.style.gap = "8px";
 }
 
+function hideCheckoutHeaderSubtotal() {
+  const checkoutHeading = Array.from(document.querySelectorAll("h1")).find((node) => textOf(node).toUpperCase() === "CHECKOUT");
+  if (!checkoutHeading) return;
+  const header = checkoutHeading.closest("div.bg-white");
+  if (!header) return;
+
+  const subtotalLabel = Array.from(header.querySelectorAll("div, span")).find((node) => textOf(node).toUpperCase() === "SUBTOTAL");
+  if (!subtotalLabel) return;
+  const amount = subtotalLabel.nextElementSibling;
+  const subtotalBlock = subtotalLabel.parentElement;
+  if (subtotalBlock && amount && textOf(amount)) {
+    (subtotalBlock as HTMLElement).style.display = "none";
+  }
+}
+
 export default function CheckoutUiConsistency() {
   const location = useLocation();
 
@@ -158,6 +173,7 @@ export default function CheckoutUiConsistency() {
     let disposed = false;
     const apply = () => {
       if (disposed) return;
+      hideCheckoutHeaderSubtotal();
       alignCodeFields();
       normalizeCourierGrid();
       updateDeliveryFeeLabel();
