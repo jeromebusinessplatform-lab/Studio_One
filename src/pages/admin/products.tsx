@@ -81,7 +81,7 @@ export default function AdminProductsPage() {
     price: 99.99,
     salePrice: "",
     costing: "",
-    stock: 50,
+    stock: 0,
     badge: "" as "" | "NEW" | "SALE" | "LOW_STOCK",
     badgeExpiry: "",
     image: undefined as string | undefined,
@@ -166,8 +166,8 @@ export default function AdminProductsPage() {
       description: "",
       price: 99.99,
       salePrice: "",
-      costing: "50.00",
-      stock: 50,
+      costing: "",
+      stock: 0,
       badge: "NEW",
       badgeExpiry: "",
       image: undefined,
@@ -203,7 +203,7 @@ export default function AdminProductsPage() {
 
   const [savingProduct, setSavingProduct] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!formData.name.trim()) {
       toast.error("Please provide a product title");
@@ -212,6 +212,15 @@ export default function AdminProductsPage() {
 
     if (formData.isCombination && formData.bundleItems.length === 0) {
       toast.error("Please add at least one product to the combination bundle");
+      return;
+    }
+
+    // Read the exact value from the submitted Stock Units field. This prevents
+    // a stale React state value (such as the old 50-unit default) from being persisted.
+    const stockInput = e.currentTarget.elements.namedItem("stock") as HTMLInputElement | null;
+    const submittedStock = stockInput ? Number(stockInput.value) : Number(formData.stock);
+    if (!Number.isInteger(submittedStock) || submittedStock < 0) {
+      toast.error("Stock Units must be a whole number 0 or greater");
       return;
     }
 
@@ -230,8 +239,8 @@ export default function AdminProductsPage() {
       salePrice:
         !formData.isCombination && formData.salePrice ? Number(formData.salePrice) : undefined,
       costing: formData.costing ? Number(formData.costing) : undefined,
-      stock: Number(formData.stock),
-      available: Number(formData.stock) > 0,
+      stock: submittedStock,
+      available: submittedStock > 0,
       badge: formData.badge ? formData.badge : undefined,
       badgeExpiry: formData.badge ? formData.badgeExpiry || undefined : undefined,
       image: formData.image || undefined,
@@ -246,7 +255,7 @@ export default function AdminProductsPage() {
     setOverlayLoading({
       isVisible: true,
       label: editingProduct ? "Updating Product..." : "Saving New Product...",
-      sublabel: `Syncing "${formData.name}" to Firestore`,
+      sublabel: `Syncing "${formData.name}" to Supabase`,
     });
     try {
       if (editingProduct) {
@@ -883,6 +892,7 @@ export default function AdminProductsPage() {
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium text-neutral-700">Stock Units *</label>
                   <input
+                    name="stock"
                     type="number"
                     required
                     min="0"

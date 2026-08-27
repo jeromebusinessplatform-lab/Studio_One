@@ -5,7 +5,6 @@ import { installReleaseRoutes } from "./releaseRoutes.js";
 import { installProductComparisonRoutes } from "./productComparisonRoutes.js";
 import { installTelegramAvatarRoutes } from "./telegramAvatarRoutes.js";
 import { installAdminComparisonRoutes } from "./adminComparisonRoutes.js";
-import { migratePrimeMemberIds } from "./primeIdentity.js";
 import { installActivityLogger } from "./activityLogger.js";
 import { installMemberProfileRoutes } from "./memberProfileRoutes.js";
 import { installOrderNumberEnforcer } from "./orderNumberEnforcer.js";
@@ -17,7 +16,7 @@ import { installQueueRoutes } from "./queueRoutes.js";
 import { installOrderWorkflowRoutes } from "./orderWorkflowRoutes.js";
 import { installOrderPatchGuardRoutes } from "./orderPatchGuardRoutes.js";
 
-export const STUDIO_ONE_SYNC_REVISION = "2026-08-25-order-queue-workflow-v2";
+export const STUDIO_ONE_SYNC_REVISION = "2026-08-26-supabase-cutover";
 
 installActivityLogger();
 installOrderNumberEnforcer();
@@ -42,7 +41,7 @@ if (!(proto as any).__primeReleaseRoutesInstalled) {
     installTelegramAvatarRoutes(this);
     installAdminComparisonRoutes(this);
     installMemberProfileRoutes(this);
-    void migratePrimeMemberIds();
+    // PRIME identity repair is now explicit/on-demand. Startup must not mutate data.
     return originalListen.apply(this, args);
   };
 }

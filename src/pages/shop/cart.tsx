@@ -1,25 +1,13 @@
 import { useCart } from "@/context/CartContext.tsx";
-import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, CheckSquare, Square, Info } from "lucide-react";
+import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, CheckSquare, Square, Info, AlertCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { formatCurrency } from "@/lib/utils.ts";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function CartPage() {
-  const {
-    items,
-    updateQuantity,
-    removeItem,
-    totalItems,
-    toggleSelect,
-    selectAll,
-    deselectAll,
-    selectedItems,
-    selectedCount,
-    selectedSubtotal,
-  } = useCart();
+  const { items, updateQuantity, removeItem, totalItems, toggleSelect, selectAll, deselectAll, selectedItems, selectedCount, selectedSubtotal } = useCart();
   const navigate = useNavigate();
-
-  const allSelected = items.length > 0 && items.every((i) => i.selected);
+  const allSelected = items.length > 0 && items.every((i) => i.selected || i.available === false);
   const noneSelected = selectedItems.length === 0;
 
   const handleToggleAll = () => {
@@ -56,66 +44,60 @@ export default function CartPage() {
               {allSelected ? <CheckSquare size={16} className="text-black" /> : <Square size={16} className="text-neutral-400" />}
               <span>{allSelected ? "Deselect All Items" : `Select All (${items.length} items)`}</span>
             </button>
-            <span className="text-xs text-neutral-500 font-mono" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{selectedItems.length} product{selectedItems.length === 1 ? "" : "s"} selected</span>
+            <span className="text-xs text-neutral-500 font-mono">{selectedItems.length} product{selectedItems.length === 1 ? "" : "s"} selected</span>
           </div>
 
           <div className="bg-white rounded-2xl border border-neutral-200/90 p-3 shadow-xs space-y-3">
             <AnimatePresence>
-              {items.map((item) => (
-                <motion.div
-                  key={item.productId}
-                  layout
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -50 }}
-                  drag="x"
-                  dragConstraints={{ left: -100, right: 0 }}
-                  onDragEnd={(_, info) => {
-                    if (info.offset.x < -50) {
-                      removeItem(item.productId);
-                    }
-                  }}
-                  className={`flex items-center gap-3 border-b border-neutral-100 pb-3 last:border-0 last:pb-0 transition-opacity ${item.selected ? "opacity-100" : "opacity-60 bg-neutral-50/50 -mx-1 px-1 rounded-lg"}`}
-                >
-                  <input type="checkbox" id={`cart-item-${item.productId}`} checked={item.selected} onChange={() => toggleSelect(item.productId)} className="w-4 h-4 rounded border-neutral-300 text-black focus:ring-black cursor-pointer accent-black shrink-0" aria-label={`Select ${item.productName} for checkout`} />
-                  <div className="w-14 h-14 rounded-lg bg-neutral-50 border border-neutral-100 p-1 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                    {item.image ? <img src={item.image} alt={item.productName} className="w-full h-full object-contain" referrerPolicy="no-referrer" /> : <ShoppingBag size={20} className="text-neutral-300" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-1">
-                      <h3 className="font-normal text-neutral-900 text-sm truncate" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>{item.productName}</h3>
-                      <button type="button" onClick={() => removeItem(item.productId)} className="text-neutral-300 hover:text-red-500 p-0.5 cursor-pointer transition-colors" title="Remove item" aria-label={`Remove ${item.productName}`}><Trash2 size={13} /></button>
+              {items.map((item) => {
+                const unavailable = item.available === false;
+                const maxQuantity = Number(item.maxQuantity ?? 0);
+                return (
+                  <motion.div key={item.productId} layout initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} drag="x" dragConstraints={{ left: -100, right: 0 }} onDragEnd={(_, info) => { if (info.offset.x < -50) removeItem(item.productId); }} className={`flex items-center gap-3 border-b border-neutral-100 pb-3 last:border-0 last:pb-0 transition-opacity ${unavailable ? "bg-rose-50/60 -mx-1 px-1 rounded-lg" : item.selected ? "opacity-100" : "opacity-60 bg-neutral-50/50 -mx-1 px-1 rounded-lg"}`}>
+                    <input type="checkbox" id={`cart-item-${item.productId}`} checked={item.selected && !unavailable} disabled={unavailable} onChange={() => toggleSelect(item.productId)} className="w-4 h-4 rounded border-neutral-300 text-black focus:ring-black cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed accent-black shrink-0" aria-label={`Select ${item.productName} for checkout`} />
+                    <div className="w-14 h-14 rounded-lg bg-neutral-50 border border-neutral-100 p-1 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                      {item.image ? <img src={item.image} alt={item.productName} className={`w-full h-full object-contain ${unavailable ? "grayscale opacity-50" : ""}`} referrerPolicy="no-referrer" /> : <ShoppingBag size={20} className="text-neutral-300" />}
                     </div>
-                    <div className="text-xs text-black font-normal mt-0.5" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{formatCurrency(item.unitPrice)} each</div>
-                    <div className="mt-2 flex items-center justify-between">
-                      <div className="h-6 border border-neutral-200 rounded-md flex items-center bg-neutral-50 overflow-hidden">
-                        <button type="button" onClick={() => updateQuantity(item.productId, item.quantity - 1)} className="px-2 h-full text-neutral-600 hover:bg-neutral-200 active:bg-neutral-300 cursor-pointer" aria-label="Decrease quantity"><Minus size={10} className="stroke-[2.5]" /></button>
-                        <span className="px-2 text-xs font-normal text-black font-mono" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{item.quantity}</span>
-                        <button type="button" onClick={() => updateQuantity(item.productId, item.quantity + 1)} className="px-2 h-full text-neutral-600 hover:bg-neutral-200 active:bg-neutral-300 cursor-pointer" aria-label="Increase quantity"><Plus size={10} className="stroke-[2.5]" /></button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-1">
+                        <div className="min-w-0">
+                          <h3 className="font-normal text-neutral-900 text-sm truncate" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>{item.productName}</h3>
+                          {unavailable ? (
+                            <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase text-rose-700"><AlertCircle size={10} /> UNAVAILABLE</div>
+                          ) : maxQuantity === 1 ? (
+                            <div className="mt-0.5 text-[10px] font-semibold uppercase text-amber-700">Only 1 available</div>
+                          ) : maxQuantity > 1 && item.quantity >= maxQuantity ? (
+                            <div className="mt-0.5 text-[10px] font-semibold uppercase text-amber-700">Max {maxQuantity} available</div>
+                          ) : null}
+                        </div>
+                        <button type="button" onClick={() => removeItem(item.productId)} className="text-neutral-300 hover:text-red-500 p-0.5 cursor-pointer transition-colors" title="Remove item" aria-label={`Remove ${item.productName}`}><Trash2 size={13} /></button>
                       </div>
-                      <div className="text-xs font-semibold text-neutral-900 font-mono" style={{ fontFamily: "'Ubuntu', sans-serif" }}>{formatCurrency(item.unitPrice * item.quantity)}</div>
+                      <div className="text-xs text-black font-normal mt-0.5">{formatCurrency(item.unitPrice)} each</div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className={`h-6 border rounded-md flex items-center overflow-hidden ${unavailable ? "border-rose-200 bg-rose-50 opacity-50" : "border-neutral-200 bg-neutral-50"}`}>
+                          <button type="button" onClick={() => updateQuantity(item.productId, item.quantity - 1)} disabled={unavailable} className="px-2 h-full text-neutral-600 hover:bg-neutral-200 active:bg-neutral-300 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40" aria-label="Decrease quantity"><Minus size={10} className="stroke-[2.5]" /></button>
+                          <span className="px-2 text-xs font-normal text-black font-mono">{item.quantity}</span>
+                          <button type="button" onClick={() => updateQuantity(item.productId, item.quantity + 1)} disabled={unavailable || (maxQuantity > 0 && item.quantity >= maxQuantity)} className="px-2 h-full text-neutral-600 hover:bg-neutral-200 active:bg-neutral-300 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40" aria-label="Increase quantity"><Plus size={10} className="stroke-[2.5]" /></button>
+                        </div>
+                        <div className="text-xs font-semibold text-neutral-900 font-mono">{formatCurrency(item.unitPrice * item.quantity)}</div>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </AnimatePresence>
           </div>
 
           <div className="bg-white rounded-2xl border border-neutral-200/90 p-4 shadow-xs space-y-2">
             <div className="flex justify-between items-baseline gap-3">
               <span className="text-sm font-normal text-neutral-700 uppercase" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>Cart Subtotal ({selectedCount} item{selectedCount === 1 ? "" : "s"} selected)</span>
-              <span className="text-xl font-bold text-black font-mono" style={{ fontFamily: "'Ubuntu', sans-serif", fontSize: "20px" }}>{formatCurrency(selectedSubtotal)}</span>
+              <span className="text-xl font-bold text-black font-mono">{formatCurrency(selectedSubtotal)}</span>
             </div>
-            {items.some((i) => !i.selected) && <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 pt-1 border-t border-neutral-100"><Info size={12} className="text-neutral-400 shrink-0" /><span>Unselected items will remain in your cart for later purchase.</span></div>}
+            {items.some((i) => i.available === false) && <div className="flex items-center gap-1.5 text-[11px] text-rose-700 pt-1 border-t border-neutral-100"><AlertCircle size={12} className="shrink-0" /><span>Unavailable items cannot be checked out. Remove them or wait for stock to return.</span></div>}
+            {items.some((i) => !i.selected && i.available !== false) && <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 pt-1 border-t border-neutral-100"><Info size={12} className="text-neutral-400 shrink-0" /><span>Unselected items will remain in your cart for later purchase.</span></div>}
             <div className="pt-2 border-t border-neutral-100 flex items-center justify-between gap-3">
               <span className="text-[10px] uppercase text-neutral-400">Next step</span>
-              {noneSelected ? (
-                <span className="text-[11px] text-amber-700 font-medium">Select at least 1 item</span>
-              ) : (
-                <button type="button" onClick={handleProceedCheckout} className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase text-black hover:opacity-60 transition-opacity" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                  Checkout selected items <ArrowRight size={14} />
-                </button>
-              )}
+              {noneSelected ? <span className="text-[11px] text-amber-700 font-medium">Select at least 1 available item</span> : <button type="button" onClick={handleProceedCheckout} className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase text-black hover:opacity-60 transition-opacity">Checkout selected items <ArrowRight size={14} /></button>}
             </div>
           </div>
         </div>

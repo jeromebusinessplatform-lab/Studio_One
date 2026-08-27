@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { ReceiptOcrResult } from "@/types/ocr.ts";
 
 export type OrderStatus = "REVIEW" | "PAYMENT_CONFIRMED" | "START_PACKING" | "READY" | "AWAITING_RIDER" | "DISPATCHED" | "DELIVERED" | "PAYMENT_FAILED" | "HOLD_ORDER" | "REQUEST_RESUBMIT" | "PAYMENT_CLEARED" | "FINAL_FOLLOW_UP" | "REJECTED" | "CANCELLED";
@@ -108,6 +108,8 @@ export function useOrders(telegramUserId?: string) {
     const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || "Unable to delete order"); await load();
   }, [load]);
 
+  const activeOrders = useMemo(() => orders.filter((order) => !["DELIVERED", "CANCELLED", "REJECTED"].includes(order.orderStatus)), [orders]);
+  const latestOrder = useMemo(() => activeOrders[0] || orders[0] || null, [activeOrders, orders]);
   const customerFilteredOrders = telegramUserId ? orders.filter((o) => o.telegramUserId === telegramUserId) : orders;
-  return useMemo(() => ({ orders: customerFilteredOrders, allOrders: orders, loading, isSyncing, lastSyncedAt, syncOrders, refresh: load, createOrder, updateOrderStatus, updateOrderOcr, updateOrderPaymentStatus, editOrder, uploadReplacementReceipt, revalidateReceipt, deleteOrder }), [customerFilteredOrders, orders, loading, isSyncing, lastSyncedAt, syncOrders, load, createOrder, updateOrderStatus, updateOrderOcr, updateOrderPaymentStatus, editOrder, uploadReplacementReceipt, revalidateReceipt, deleteOrder]);
+  return useMemo(() => ({ orders: customerFilteredOrders, allOrders: orders, activeOrders, latestOrder, loading, error, isSyncing, lastSyncedAt, syncOrders, refresh: load, createOrder, updateOrderStatus, updateOrderOcr, updateOrderPaymentStatus, editOrder, uploadReplacementReceipt, revalidateReceipt, deleteOrder }), [customerFilteredOrders, orders, activeOrders, latestOrder, loading, error, isSyncing, lastSyncedAt, syncOrders, load, createOrder, updateOrderStatus, updateOrderOcr, updateOrderPaymentStatus, editOrder, uploadReplacementReceipt, revalidateReceipt, deleteOrder]);
 }

@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "reset:prelaunch": "tsx scripts/resetPrelaunchData.ts"
+    "reset:prelaunch": "tsx scripts/resetPrelaunchData.ts",
+    "seed:test-catalog": "tsx scripts/seedTestCatalog.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -24,8 +25,6 @@
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "fast-average-color": "^9.5.2",
-    "firebase": "^12.18.0",
-    "firebase-admin": "^13.6.0",
     "form-data": "^4.0.6",
     "html5-qrcode": "^2.3.8",
     "idb": "^8.0.3",
