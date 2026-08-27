@@ -25,8 +25,6 @@
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "fast-average-color": "^9.5.2",
-    "firebase": "^12.18.0",
-    "firebase-admin": "^13.6.0",
     "form-data": "^4.0.6",
     "html5-qrcode": "^2.3.8",
     "idb": "^8.0.3",
