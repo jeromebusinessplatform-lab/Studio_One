@@ -64,18 +64,18 @@ export default function ShopLayout() {
 
   return (
     <div className="flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-[#f3f4f6]">
-      <div className="shrink-0 bg-white">
+      <div className="shrink-0 bg-white relative z-[1000] pointer-events-auto">
         <ShopHeader />
         <QueueStrip />
       </div>
 
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f3f4f6]">
+      <main className="relative z-0 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f3f4f6]">
         <div className="w-full min-h-full">
           <Outlet />
         </div>
       </main>
 
-      <div className="shrink-0">
+      <div className="relative z-[1000] shrink-0 bg-white pointer-events-auto isolate">
         <BottomNav />
         <GlobalProprietaryFooter />
       </div>
