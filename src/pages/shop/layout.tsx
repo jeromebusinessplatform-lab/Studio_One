@@ -69,15 +69,17 @@ export default function ShopLayout() {
         <QueueStrip />
       </div>
 
-      <main className="relative z-0 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f3f4f6]">
+      <main className="relative z-0 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f3f4f6] pb-[61px]">
         <div className="w-full min-h-full">
           <Outlet />
         </div>
       </main>
 
-      <div className="relative z-[1000] shrink-0 bg-white pointer-events-auto isolate">
-        <BottomNav />
-        <GlobalProprietaryFooter />
+      <div className="fixed inset-x-0 bottom-0 z-[10000] w-full bg-white pointer-events-auto isolate shadow-[0_-4px_14px_rgba(0,0,0,0.08)]">
+        <div className="w-full pointer-events-auto">
+          <BottomNav />
+          <GlobalProprietaryFooter />
+        </div>
       </div>
     </div>
   );
