@@ -9,7 +9,6 @@ export default defineConfig(() => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
-        'firebase/storage': path.resolve(__dirname, './src/lib/supabaseStorageShim.ts'),
       },
     },
     server: {
