@@ -39,7 +39,7 @@ export default function BottomNav() {
           setUnreadNotifications(data.notifications.filter((n: any) => !n.read).length);
         }
       } catch {
-        // Preserve the last known badge count during transient network failures.
+        // Preserve last known count on transient failures.
       }
     };
     void loadUnread();
@@ -63,13 +63,16 @@ export default function BottomNav() {
   ];
 
   const go = (href: string) => {
-    if (path === href) return;
-    navigate(href);
+    if (path !== href) navigate(href);
   };
 
   return (
-    <nav className="relative z-[1000] pointer-events-auto isolate w-full shrink-0 bg-white border-t border-neutral-200 shadow-lg" aria-label="Primary shop navigation">
-      <div className="relative z-[1001] flex items-center justify-around h-10 px-2 w-full max-w-full mx-auto pointer-events-auto select-none">
+    <nav
+      className="fixed inset-x-0 bottom-[21px] z-[2147483000] w-full bg-white border-t border-neutral-200 shadow-lg pointer-events-auto isolate"
+      aria-label="Primary shop navigation"
+      data-prime-bottom-nav="true"
+    >
+      <div className="flex items-center justify-around h-10 px-2 w-full pointer-events-auto select-none">
         {navItems.map(({ href, icon: Icon, label, badge }) => {
           const isActive = path === href || (href !== "/shop" && path.startsWith(href));
           const isCart = href === "/shop/cart";
@@ -78,6 +81,11 @@ export default function BottomNav() {
             <button
               key={href}
               type="button"
+              data-prime-nav-target={href}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -85,7 +93,7 @@ export default function BottomNav() {
               }}
               aria-label={label}
               aria-current={isActive ? "page" : undefined}
-              className={`relative z-[1002] pointer-events-auto flex flex-col items-center justify-center flex-1 h-full cursor-pointer touch-manipulation transition-colors appearance-none bg-transparent border-0 ${isActive ? "text-black font-bold" : "text-neutral-600 hover:text-black"}`}
+              className={`relative flex flex-col items-center justify-center flex-1 h-full cursor-pointer touch-manipulation select-none appearance-none bg-transparent border-0 ${isActive ? "text-black font-bold" : "text-neutral-600 hover:text-black"}`}
             >
               <div className="relative flex items-center justify-center pointer-events-none">
                 <motion.div animate={isCart || isAlerts ? controls : {}}>
