@@ -44,16 +44,30 @@ function normalizeProduct(product: any) {
   };
 }
 
-function cleanProductInput(body: any) {
+function cleanProductInput(body: any, options: { creating?: boolean } = {}) {
   const name = String(body?.name || "").trim();
   const price = number(body?.price, NaN);
   const stock = number(body?.stock ?? body?.stockQuantity, NaN);
   if (!name || !Number.isFinite(price) || price < 0 || !Number.isFinite(stock) || !Number.isInteger(stock) || stock < 0) {
     throw new Error("Invalid product name, price, or stock quantity");
   }
+
   const payload: Record<string, any> = { ...body, name, price, stockQuantity: stock, active: body?.active !== false };
   delete payload._id;
   delete payload.stock;
+
+  // The database requires SKU to be non-null and unique, while the Product
+  // Configurator treats SKU as optional. Generate a server-side SKU only when
+  // the admin leaves it blank; explicit admin-provided SKUs are preserved.
+  const sku = String(payload.sku ?? "").trim();
+  if (sku) {
+    payload.sku = sku;
+  } else if (options.creating) {
+    payload.sku = `AUTO-${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
+  } else {
+    delete payload.sku;
+  }
+
   payload.available = stock > 0 && payload.active !== false;
   return payload;
 }
@@ -82,7 +96,7 @@ export function installProductRoutes(app: Application) {
   app.post("/api/admin/products", async (req, res) => {
     if (!adminSession(req)) return res.status(401).json({ error: "Admin authentication required" });
     try {
-      const payload = cleanProductInput(req.body);
+      const payload = cleanProductInput(req.body, { creating: true });
       const product = await supabaseService.addDocument("products", payload);
       return res.status(201).json({ success: true, product: normalizeProduct(product) });
     } catch (error: any) {
@@ -96,9 +110,9 @@ export function installProductRoutes(app: Application) {
     const id = String(req.params.id || "");
     if (!id || id.length > 150) return res.status(400).json({ error: "Invalid product id" });
     try {
-      const payload = cleanProductInput({ ...(req.body || {}) });
       const existing = await supabaseService.getDocument("products", id);
       if (!existing) return res.status(404).json({ error: "Product not found" });
+      const payload = cleanProductInput({ ...existing, ...(req.body || {}) });
       const updated = await supabaseService.updateDocument("products", id, payload);
       return res.json({ success: true, product: normalizeProduct(updated) });
     } catch (error: any) {
