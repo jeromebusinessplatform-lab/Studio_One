@@ -47,20 +47,20 @@ export function useCouriers() {
   };
 
   const addCourier = async (courier: Omit<Courier, "id">) => {
-    const data = await api("/api/admin/couriers", { method: "POST", body: JSON.stringify(courier) });
+    const data = await api("/api/admin/logistics/providers", { method: "POST", body: JSON.stringify(courier) });
     await refresh();
     return data;
   };
 
   const updateCourier = async (id: string, updates: Partial<Courier>) => {
     const { id: _, ...rest } = updates;
-    const data = await api(`/api/admin/couriers/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(rest) });
+    const data = await api(`/api/admin/logistics/providers/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(rest) });
     await refresh();
     return data;
   };
 
   const removeCourier = async (id: string) => {
-    const data = await api(`/api/admin/couriers/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const data = await api(`/api/admin/logistics/providers/${encodeURIComponent(id)}`, { method: "DELETE" });
     await refresh();
     return data;
   };
