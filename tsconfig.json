@@ -23,6 +23,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "firebase/storage": [
+        "./src/lib/supabaseStorageShim.ts"
       ]
     },
     "allowImportingTsExtensions": true,
