@@ -4,6 +4,7 @@ import { useCart } from "@/context/CartContext.tsx";
 import { useTelegram } from "@/context/TelegramContext.tsx";
 import { motion, useAnimation } from "motion/react";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export default function BottomNav() {
   const location = useLocation();
@@ -66,9 +67,9 @@ export default function BottomNav() {
     if (path !== href) navigate(href);
   };
 
-  return (
+  const nav = (
     <nav
-      className="fixed inset-x-0 bottom-[21px] z-[2147483000] w-full bg-white border-t border-neutral-200 shadow-lg pointer-events-auto isolate"
+      className="fixed inset-x-0 bottom-[21px] z-[2147483647] w-full bg-white border-t border-neutral-200 shadow-lg pointer-events-auto isolate"
       aria-label="Primary shop navigation"
       data-prime-bottom-nav="true"
     >
@@ -111,4 +112,6 @@ export default function BottomNav() {
       </div>
     </nav>
   );
+
+  return createPortal(nav, document.body);
 }
