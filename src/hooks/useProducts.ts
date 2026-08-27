@@ -1,6 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { onSnapshot, doc, setDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
 import { INITIAL_CATEGORIES, type Product, type BundleItemConfig } from "@/data/products.ts";
 
 function normalizeSupabaseProduct(raw: any): Product {
@@ -47,29 +45,9 @@ export function useProducts() {
   const [loading, setLoading] = useState(true);
   const productsRef = useRef<Product[]>([]);
 
-  // Categories remain temporarily backed by the legacy configuration document.
-  useEffect(() => {
-    let isMounted = true;
-    const categoriesRef = doc(db, "config", "categories");
-    const unsubscribe = onSnapshot(
-      categoriesRef,
-      (docSnap) => {
-        if (!isMounted) return;
-        const list = docSnap.exists() ? docSnap.data().list : null;
-        setCategories(Array.isArray(list) && list.length > 0 ? list : INITIAL_CATEGORIES);
-      },
-      (error) => {
-        console.error("Categories listener error:", error);
-        if (isMounted) setCategories(INITIAL_CATEGORIES);
-      },
-    );
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, []);
-
-  // Supabase is the single product/inventory authority for catalog and admin UI.
+  // Supabase is the single product/inventory authority. Categories are derived from
+  // the current Supabase products plus the stable initial category set; no Firebase
+  // reads or writes are performed by this hook.
   useEffect(() => {
     let isMounted = true;
     const refresh = async () => {
@@ -82,6 +60,8 @@ export function useProducts() {
           setProducts(data);
           productsRef.current = data;
         }
+        const derived = [...new Set([...INITIAL_CATEGORIES, ...data.map((p) => String(p.category || "GENERAL")).filter(Boolean)])];
+        setCategories(derived);
       } catch (error) {
         console.error("Supabase products refresh error:", error);
       } finally {
@@ -139,28 +119,25 @@ export function useProducts() {
   const addCategory = useCallback(async (newCategory: string) => {
     const trimmed = newCategory.trim();
     if (!trimmed) return false;
-    const newCategories = [...categories.filter((c) => c !== trimmed), trimmed];
-    await setDoc(doc(db, "config", "categories"), { list: newCategories });
+    setCategories((prev) => [...new Set([...prev, trimmed])]);
     return true;
-  }, [categories]);
+  }, []);
 
   const editCategory = useCallback(async (oldCategory: string, newCategory: string) => {
     const trimmedNew = newCategory.trim();
     if (!trimmedNew || oldCategory === trimmedNew) return false;
-    const newCategories = categories.map((c) => (c === oldCategory ? trimmedNew : c));
-    await setDoc(doc(db, "config", "categories"), { list: newCategories });
+    setCategories((prev) => prev.map((c) => (c === oldCategory ? trimmedNew : c)));
     const affected = products.filter((p) => p.category === oldCategory).map((p) => p._id);
     await batchUpdateCategory(affected, trimmedNew);
     return true;
-  }, [categories, products, batchUpdateCategory]);
+  }, [products, batchUpdateCategory]);
 
   const removeCategory = useCallback(async (categoryToRemove: string, fallback = "General") => {
-    const newCategories = categories.filter((c) => c !== categoryToRemove);
-    await setDoc(doc(db, "config", "categories"), { list: newCategories });
+    setCategories((prev) => prev.filter((c) => c !== categoryToRemove));
     const affected = products.filter((p) => p.category === categoryToRemove).map((p) => p._id);
     await batchUpdateCategory(affected, fallback);
     return true;
-  }, [categories, products, batchUpdateCategory]);
+  }, [products, batchUpdateCategory]);
 
   const computeBundlePrice = useCallback((bundleItems: BundleItemConfig[] = []): number => {
     let total = 0;
