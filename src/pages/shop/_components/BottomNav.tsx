@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Store, ShoppingCart, ListOrdered, Bell, User, Headphones } from "lucide-react";
 import { useCart } from "@/context/CartContext.tsx";
 import { useTelegram } from "@/context/TelegramContext.tsx";
@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 export default function BottomNav() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { totalItems, pulse } = useCart();
   const { customer } = useTelegram();
   const path = location.pathname;
@@ -61,15 +62,31 @@ export default function BottomNav() {
     { href: "/shop/support", icon: Headphones, label: "SUPPORT", badge: undefined },
   ];
 
+  const go = (href: string) => {
+    if (path === href) return;
+    navigate(href);
+  };
+
   return (
-    <nav className="relative z-[70] pointer-events-auto w-full shrink-0 bg-white border-t border-neutral-200 shadow-lg">
-      <div className="relative z-[71] flex items-center justify-around h-10 px-2 w-full max-w-full mx-auto pointer-events-auto">
+    <nav className="relative z-[1000] pointer-events-auto isolate w-full shrink-0 bg-white border-t border-neutral-200 shadow-lg" aria-label="Primary shop navigation">
+      <div className="relative z-[1001] flex items-center justify-around h-10 px-2 w-full max-w-full mx-auto pointer-events-auto select-none">
         {navItems.map(({ href, icon: Icon, label, badge }) => {
           const isActive = path === href || (href !== "/shop" && path.startsWith(href));
           const isCart = href === "/shop/cart";
           const isAlerts = href === "/shop/notifications";
           return (
-            <Link key={href} to={href} aria-label={label} className={`relative z-[72] pointer-events-auto flex flex-col items-center justify-center flex-1 h-full cursor-pointer touch-manipulation select-none transition-colors ${isActive ? "text-black font-bold" : "text-neutral-600 hover:text-black"}`}>
+            <button
+              key={href}
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                go(href);
+              }}
+              aria-label={label}
+              aria-current={isActive ? "page" : undefined}
+              className={`relative z-[1002] pointer-events-auto flex flex-col items-center justify-center flex-1 h-full cursor-pointer touch-manipulation transition-colors appearance-none bg-transparent border-0 ${isActive ? "text-black font-bold" : "text-neutral-600 hover:text-black"}`}
+            >
               <div className="relative flex items-center justify-center pointer-events-none">
                 <motion.div animate={isCart || isAlerts ? controls : {}}>
                   <Icon size={20.5} className={`transition-transform duration-150 ${isActive ? "stroke-[2.5] scale-105 text-black" : "stroke-[1.75] text-neutral-700"}`} />
@@ -80,7 +97,7 @@ export default function BottomNav() {
                   </span>
                 )}
               </div>
-            </Link>
+            </button>
           );
         })}
       </div>
