@@ -3,8 +3,6 @@ import { useTelegram } from "@/context/TelegramContext.tsx";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useOrders } from "@/hooks/useOrders";
 import { User, Pencil, UserRound, Copy, Check } from "lucide-react";
-import { storage } from "@/lib/firebase";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "sonner";
 import { PrimeMemberLink } from "@/components/PrimeMemberProfile.tsx";
 
@@ -14,6 +12,19 @@ type Referrer = {
   primeMemberId: string;
   vipTier: string;
 };
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = typeof reader.result === "string" ? reader.result : "";
+      if (!value) reject(new Error("Unable to read selected image."));
+      else resolve(value);
+    };
+    reader.onerror = () => reject(reader.error || new Error("Unable to read selected image."));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function AccountPage() {
   const { customer, isAuthenticated, isTelegramEnv, error: telegramError, isLoading: isTelegramLoading } = useTelegram();
@@ -68,28 +79,20 @@ export default function AccountPage() {
     if (!file || !customer?.telegramUserId) return;
     setIsUpdating(true);
     try {
-      let url = "";
-      try {
-        const storageRef = ref(storage, `avatars/${customer.telegramUserId}_${Date.now()}`);
-        await uploadBytes(storageRef, file);
-        url = await getDownloadURL(storageRef);
-      } catch (fbErr) {
-        console.warn("Firebase storage upload failed, using Data URL fallback:", fbErr);
-        url = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-      }
+      if (!file.type.startsWith("image/")) throw new Error("Please select an image file.");
+      if (file.size > 2 * 1024 * 1024) throw new Error("Avatar image must be 2 MB or smaller.");
+      // Supabase is the only persistence layer. For the current member-profile flow,
+      // store the compressed/readable image as the avatar value in the customer record.
+      const url = await fileToDataUrl(file);
       await updateCustomerAvatar(customer.telegramUserId, url, true);
       setAvatarUrl(url);
       toast.success("Profile avatar updated successfully!");
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error("Failed to upload avatar.");
+      toast.error(error?.message || "Failed to upload avatar.");
     } finally {
       setIsUpdating(false);
+      e.target.value = "";
     }
   };
 
