@@ -20,13 +20,10 @@ export default function ShopLayout() {
     if (!orders || orders.length === 0) return;
     const prevMap = prevStatusesRef.current;
     if (initialLoadRef.current) {
-      orders.forEach((ord) => {
-        prevMap.set(ord._id || ord.orderNumber, ord.orderStatus);
-      });
+      orders.forEach((ord) => prevMap.set(ord._id || ord.orderNumber, ord.orderStatus));
       initialLoadRef.current = false;
       return;
     }
-
     orders.forEach((ord) => {
       const id = ord._id || ord.orderNumber;
       const oldStatus = prevMap.get(id);
@@ -35,14 +32,7 @@ export default function ShopLayout() {
         const readableStatus = ord.orderStatus.replace(/_/g, " ");
         toast.success(`📦 Order #${ord.orderNumber} status updated to: ${readableStatus}`, {
           duration: 8000,
-          style: {
-            background: "#000",
-            color: "#fff",
-            fontSize: "12px",
-            fontWeight: 600,
-            borderRadius: "12px",
-            padding: "10px 16px",
-          },
+          style: { background: "#000", color: "#fff", fontSize: "12px", fontWeight: 600, borderRadius: "12px", padding: "10px 16px" },
         });
       } else if (!oldStatus) {
         prevMap.set(id, ord.orderStatus);
@@ -69,18 +59,14 @@ export default function ShopLayout() {
         <QueueStrip />
       </div>
 
-      <main className="relative z-0 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f3f4f6] pb-[61px]">
+      <main className="relative z-0 min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f3f4f6] pb-[82px]">
         <div className="w-full min-h-full">
           <Outlet />
         </div>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-[10000] w-full bg-white pointer-events-auto isolate shadow-[0_-4px_14px_rgba(0,0,0,0.08)]">
-        <div className="w-full pointer-events-auto">
-          <BottomNav />
-          <GlobalProprietaryFooter />
-        </div>
-      </div>
+      <BottomNav />
+      <GlobalProprietaryFooter />
     </div>
   );
 }
