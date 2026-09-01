@@ -212,12 +212,12 @@ export default function AdminDashboardPage() {
             onClick={() => navigate("/admin")}
             className="cursor-pointer flex items-center h-8 sm:h-9"
           >
-            <PrimeLogo className="h-full w-auto" />
+            <PrimeLogo className="h-full w-auto prime-shadow" />
           </div>
 
           {/* Date & Access Status */}
           <div className="text-right leading-none">
-            <div className="text-[11px] sm:text-[12px] font-bold tracking-tight text-neutral-900 uppercase">
+            <div className="text-base font-bold tracking-tight text-neutral-900 uppercase">
               {currentDateTime || "08-AUG-2026 | 11:13:57 AM"}
             </div>
             <div className="text-[11px] sm:text-[12px] font-extrabold tracking-normal text-black uppercase mt-0.5">
