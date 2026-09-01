@@ -1,4 +1,5 @@
 import { useLiveQueue } from "@/hooks/useLiveQueue.ts";
+import { motion } from "motion/react";
 
 export default function QueueStrip() {
   const { queue } = useLiveQueue();
@@ -16,9 +17,14 @@ export default function QueueStrip() {
           <div className="text-neutral-500 font-normal uppercase leading-none truncate w-full text-[8px]" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
             ACTIVE ORDERS
           </div>
-          <div className="font-semibold whitespace-nowrap leading-none mt-1 text-[12px] text-blue-600 font-mono">
+          <motion.div 
+            key={queue.activeOrders}
+            initial={{ opacity: 0.5, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="font-semibold whitespace-nowrap leading-none mt-1 text-[12px] text-blue-600 font-mono"
+          >
             {queue.activeOrders}
-          </div>
+          </motion.div>
           <div className="absolute right-0 top-1.5 bottom-1.5 w-px bg-neutral-200" />
         </div>
 
@@ -26,9 +32,14 @@ export default function QueueStrip() {
           <div className="text-neutral-500 font-normal uppercase leading-none truncate w-full text-[8px]" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
             YOUR POSITION
           </div>
-          <div className="font-semibold whitespace-nowrap leading-none mt-1 text-[12px] text-neutral-900 font-mono truncate w-full">
+          <motion.div 
+            key={queue.yourPosition}
+            initial={{ opacity: 0.5, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="font-semibold whitespace-nowrap leading-none mt-1 text-[12px] text-neutral-900 font-mono truncate w-full"
+          >
             {queue.yourPosition}
-          </div>
+          </motion.div>
           <div className="absolute right-0 top-1.5 bottom-1.5 w-px bg-neutral-200" />
         </div>
 
@@ -36,9 +47,14 @@ export default function QueueStrip() {
           <div className="text-neutral-500 font-normal uppercase leading-none truncate w-full text-[8px]" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
             EST. WAIT TIME
           </div>
-          <div className="font-semibold whitespace-nowrap leading-none mt-1 text-[12px] text-rose-600 font-mono">
+          <motion.div 
+            key={queue.estimatedWaitTime}
+            initial={{ opacity: 0.5, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="font-semibold whitespace-nowrap leading-none mt-1 text-[12px] text-rose-600 font-mono"
+          >
             {Math.max(1, Math.round(queue.estimatedWaitTime))} MIN
-          </div>
+          </motion.div>
           <div className="absolute right-0 top-1.5 bottom-1.5 w-px bg-neutral-200" />
         </div>
 
@@ -46,9 +62,14 @@ export default function QueueStrip() {
           <div className="text-neutral-500 font-normal uppercase leading-none truncate w-full text-[8px]" style={{ fontFamily: "'Roboto Condensed', sans-serif" }}>
             ORDER TRAFFIC
           </div>
-          <div className={`font-semibold whitespace-nowrap leading-none mt-1 text-[12px] ${trafficStyles[queue.orderTraffic]} font-mono`}>
+          <motion.div
+            key={queue.orderTraffic}
+            initial={{ opacity: 0.5, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`font-semibold whitespace-nowrap leading-none mt-1 text-[12px] ${trafficStyles[queue.orderTraffic]} font-mono`}
+          >
             {queue.orderTraffic}
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>

@@ -12,8 +12,12 @@ function generateUniqueCode(length: number, used: Set<string>): string {
     const bytes = crypto.randomBytes(length);
     let value = "";
     for (const byte of bytes) value += MID_ALPHABET[byte % MID_ALPHABET.length];
-    if (!used.has(value)) return value;
+    if (!used.has(value)) {
+      console.log(`[PrimeIdentity] Generated unique MID: ${value} on attempt ${attempt}`);
+      return value;
+    }
   }
+  console.error("[PrimeIdentity] Failed to generate unique MID after 100 attempts");
   throw new Error("Unable to generate a unique PRIME Member ID");
 }
 

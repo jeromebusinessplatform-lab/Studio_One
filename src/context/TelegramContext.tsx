@@ -52,10 +52,22 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
 
         let primeMemberId: string | undefined;
         try {
+          console.log(`[TelegramProvider] Fetching customer profile for user ${user.id}...`);
           const profileRes = await fetchWithTimeout(`/api/customers?userId=${encodeURIComponent(String(user.id))}&_t=${Date.now()}`, { credentials: "same-origin", cache: "no-store" }, 6000);
           const profileData = await profileRes.json().catch(() => ({}));
-          primeMemberId = profileData?.customers?.[0]?.primeMemberId;
-        } catch {}
+          
+          if (profileData?.customers?.[0]) {
+            primeMemberId = profileData.customers[0].primeMemberId;
+            console.log(`[TelegramProvider] Found PRIME Member ID for user ${user.id}: ${primeMemberId}`);
+            if (!primeMemberId) {
+              console.warn(`[TelegramProvider] PRIME Member ID is missing for user ${user.id} in fetched profile.`);
+            }
+          } else {
+            console.warn(`[TelegramProvider] No customer record found for user ${user.id} to retrieve PRIME Member ID.`);
+          }
+        } catch (e) {
+          console.error(`[TelegramProvider] Failed to fetch customer profile for user ${user.id}:`, e);
+        }
 
         if (!cancelled) {
           setCustomer({ ...profile, primeMemberId });

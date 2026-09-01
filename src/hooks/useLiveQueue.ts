@@ -41,7 +41,7 @@ export function useLiveQueue() {
 
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => void load(), 15000);
+    const timer = window.setInterval(() => void load(), 5000);
     const handleVisible = () => {
       if (document.visibilityState === "visible") void load();
     };

@@ -30,6 +30,16 @@ function tierClasses(tone: string) {
   return styles[tone] || styles.bronze;
 }
 
+export function PrimeMemberIndicator({ primeMemberId }: { primeMemberId?: string | null }) {
+  if (!primeMemberId) return null;
+  return (
+    <div className="flex items-center gap-2 text-[10px] bg-neutral-900 text-neutral-300 px-3 py-1.5 rounded-full mt-2 font-mono">
+      <ShieldCheck size={12} />
+      <span>ID: {primeMemberId}</span>
+    </div>
+  );
+}
+
 export function PrimeMemberLink({ primeMemberId, className = "" }: { primeMemberId?: string | null; className?: string }) {
   const mid = String(primeMemberId || "").trim().toUpperCase();
   if (!isPublicPrimeMemberId(mid)) return <>{primeMemberId || "—"}</>;
@@ -154,6 +164,7 @@ export default function PrimeMemberProfile() {
 
                   <div className="grid gap-2">
                     <div className="rounded-xl border border-neutral-200 p-3 flex items-center justify-between gap-3"><span className="text-[10px] uppercase tracking-wider text-neutral-500 flex items-center gap-2"><Link2 size={13} /> PRIME Member ID</span><span className="font-mono font-bold text-xs">{member.primeMemberId}</span></div>
+                    <PrimeMemberIndicator primeMemberId={member.primeMemberId} />
                   </div>
 
                   {referredBy && (
