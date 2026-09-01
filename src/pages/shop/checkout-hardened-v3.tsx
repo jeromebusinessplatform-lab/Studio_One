@@ -391,15 +391,8 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* Header Right: Subtotal Amount */}
-        <div className="text-right">
-          <div className="text-[10px] text-neutral-400 uppercase font-semibold font-mono tracking-wider">
-            SUBTOTAL
-          </div>
-          <div className="text-base font-bold text-neutral-950 leading-tight font-mono">
-            {formatCurrency(subtotalNow)}
-          </div>
-        </div>
+        {/* Header Right: Removed Subtotal per user request */}
+        <div className="w-6"></div>
       </div>
 
       {/* Step Indicators: Oval Chips with Dark Gray Active State */}

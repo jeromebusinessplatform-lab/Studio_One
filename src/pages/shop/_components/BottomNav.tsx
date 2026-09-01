@@ -68,8 +68,18 @@ export default function BottomNav() {
           const isActive = path === href || (href !== "/shop" && path.startsWith(href));
           const isCart = href === "/shop/cart";
           const isAlerts = href === "/shop/notifications";
+          const isCheckout = path.includes("/shop/checkout");
+          
+          const handleClick = (e: React.MouseEvent) => {
+            if (isCheckout && href !== path) {
+              if (!confirm("You have an ongoing checkout. Do you want to continue or discard your changes?")) {
+                e.preventDefault();
+              }
+            }
+          };
+
           return (
-            <Link key={href} to={href} className={`flex flex-col items-center justify-center flex-1 h-full relative cursor-pointer transition-colors ${isActive ? "text-black font-bold" : "text-neutral-600 hover:text-black"}`}>
+            <Link key={href} to={href} onClick={handleClick} className={`flex flex-col items-center justify-center flex-1 h-full relative cursor-pointer transition-colors ${isActive ? "text-black font-bold" : "text-neutral-600 hover:text-black"}`}>
               <div className="relative flex items-center justify-center">
                 <motion.div animate={isCart || isAlerts ? controls : {}}>
                   <Icon size={20.5} className={`transition-transform duration-150 ${isActive ? "stroke-[2.5] scale-105 text-black" : "stroke-[1.75] text-neutral-700"}`} />
