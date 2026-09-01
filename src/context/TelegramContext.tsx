@@ -37,15 +37,18 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         const response = await fetchWithTimeout("/api/auth/telegram", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ initData }) });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data.authenticated) throw new Error(data.error || "Telegram authentication failed");
+        
+        // Use server-provided user but ensure it's hydrated with initDataUnsafe for real-time accuracy
         const user = data.user;
-        let hydratedAvatar = user.photo_url || initUser.photo_url;
-        if (!hydratedAvatar) {
-          try {
-            const fallbackRes = await fetchWithTimeout("/api/auth/telegram/avatar-sync", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ initData }) }, 6000);
-            const fallbackData = await fallbackRes.json().catch(() => ({}));
-            if (fallbackData?.avatarUrl) hydratedAvatar = fallbackData.avatarUrl;
-          } catch {}
-        }
+        const profile = {
+          telegramUserId: String(user.id),
+          telegramDisplayName: [initUser.first_name, initUser.last_name].filter(Boolean).join(" ") || `TG User ${user.id}`,
+          telegramUsername: initUser.username,
+          telegramFirstName: initUser.first_name,
+          telegramLastName: initUser.last_name,
+          telegramLanguageCode: initUser.language_code || "en",
+          avatarUrl: initUser.photo_url || user.photo_url,
+        };
 
         let primeMemberId: string | undefined;
         try {
@@ -55,11 +58,10 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         } catch {}
 
         if (!cancelled) {
-          setCustomer({ telegramUserId: String(user.id), telegramDisplayName: [user.first_name, user.last_name].filter(Boolean).join(" ") || `TG User ${user.id}`, telegramUsername: user.username, telegramFirstName: user.first_name, telegramLastName: user.last_name, telegramLanguageCode: user.language_code || "en", avatarUrl: hydratedAvatar, primeMemberId });
+          setCustomer({ ...profile, primeMemberId });
           setSessionToken(initData);
           setError(null);
         }
-        if (hydratedAvatar) void fetchWithTimeout("/api/auth/telegram/avatar-sync", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ initData }) }, 5000).catch(() => undefined);
       } catch (e: any) {
         if (!cancelled) {
           if (initUser) {

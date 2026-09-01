@@ -18,7 +18,7 @@ function generateUniqueCode(length: number, used: Set<string>): string {
 }
 
 export function generatePrimeMemberId(used = new Set<string>()): string {
-  return generateUniqueCode(10, used);
+  return generateUniqueCode(12, used);
 }
 
 export function isLegacyPrimeMemberId(value: unknown): value is string {
@@ -27,7 +27,7 @@ export function isLegacyPrimeMemberId(value: unknown): value is string {
 
 export function isValidPrimeMemberId(value: unknown): value is string {
   const normalized = typeof value === "string" ? value.trim().toUpperCase() : "";
-  return /^[A-Z0-9]{10}$/.test(normalized) && !isLegacyPrimeMemberId(normalized);
+  return /^[A-Z0-9]{12}$/.test(normalized) && !isLegacyPrimeMemberId(normalized);
 }
 
 // Referral Code intentionally equals PRIME Member ID. Kept as a named validator for route readability.
