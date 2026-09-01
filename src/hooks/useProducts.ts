@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { collection, onSnapshot, query, doc, addDoc, updateDoc, deleteDoc, setDoc, writeBatch } from "firebase/firestore";
+import { useCallback } from "react";
+import { collection, doc, addDoc, updateDoc, deleteDoc, setDoc, writeBatch } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, type Product, type BundleItemConfig } from "@/data/products.ts";
-import { saveProducts, getProducts } from "@/lib/db";
+import { type Product, type BundleItemConfig } from "@/data/products.ts";
+import { useAdmin } from "@/context/AdminContext.tsx";
 
 /**
  * Removes any undefined properties from an object so Firestore does not reject the write.
@@ -18,93 +18,7 @@ function cleanPayload<T extends Record<string, any>>(obj: T): Record<string, any
 }
 
 export function useProducts() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
-  const [loading, setLoading] = useState(true);
-  const productsRef = useRef<Product[]>([]);
-
-  // Load products and categories from Firestore
-  useEffect(() => {
-    let isMounted = true;
-
-    // Categories
-    const categoriesRef = doc(db, "config", "categories");
-    const unsubscribeCategories = onSnapshot(
-      categoriesRef,
-      (docSnap) => {
-        if (!isMounted) return;
-        if (docSnap.exists()) {
-          const list = docSnap.data().list;
-          if (Array.isArray(list) && list.length > 0) {
-            setCategories(list);
-          } else {
-            setCategories(INITIAL_CATEGORIES);
-          }
-        } else {
-          setCategories(INITIAL_CATEGORIES);
-        }
-      },
-      (error) => {
-        console.error("Categories listener error:", error);
-        if (isMounted) setCategories(INITIAL_CATEGORIES);
-      }
-    );
-    
-    // Products
-    const q = query(collection(db, "products"));
-    const unsubscribeProducts = onSnapshot(
-      q,
-      async (snapshot) => {
-        if (!isMounted) return;
-        
-        // ... (existing seeding logic)
-        if (snapshot.empty) {
-            // ... (existing seeding logic)
-            if (isMounted) {
-                setProducts(INITIAL_PRODUCTS);
-                productsRef.current = INITIAL_PRODUCTS;
-                setLoading(false);
-            }
-            return;
-        }
-
-        const data = snapshot.docs.map((docSnap) => {
-          const raw = docSnap.data();
-          console.log("Firestore Product Data:", docSnap.id, raw);
-          return {
-            _id: docSnap.id,
-            name: raw.name || "Untitled Product",
-            price: Number(raw.price) || 0,
-            stock: Number(raw.stock) || 0,
-            available: raw.available !== false,
-            ...raw,
-          } as Product;
-        });
-
-        if (isMounted) {
-            if (JSON.stringify(data) !== JSON.stringify(productsRef.current)) {
-              setProducts(data);
-              productsRef.current = data;
-            }
-            setLoading(false);
-            // saveProducts(data).catch(console.error);
-        }
-      },
-      (error) => {
-        console.error("Products listener error:", error);
-        if (isMounted) {
-          setProducts((prev) => (prev.length > 0 ? prev : INITIAL_PRODUCTS));
-          setLoading(false);
-        }
-      }
-    );
-
-    return () => {
-      isMounted = false;
-      unsubscribeProducts();
-      unsubscribeCategories();
-    };
-  }, []);
+  const { products, categories, productsLoading: loading, setProducts } = useAdmin();
 
   const addProduct = async (newProd: Omit<Product, "_id">) => {
     const cleaned = cleanPayload(newProd);

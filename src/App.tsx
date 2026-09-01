@@ -27,13 +27,10 @@ import AdminComparisonPage from "./pages/admin/comparison.tsx";
 import AdminSettingsPage from "./pages/admin/settings.tsx";
 import AdminCourierPage from "./pages/admin/courier.tsx";
 import AdminReceiptOcrPage from "./pages/admin/receipt-ocr.tsx";
-import AdminAnalyticsPage from "./pages/admin/analytics.tsx";
 import AdminChargesPage from "./pages/admin/charges.tsx";
 import AdminDiscountsPage from "./pages/admin/discounts.tsx";
 import AdminCouponConfiguratorPage from "./pages/admin/coupon-configurator.tsx";
 import AdminReferralsPage from "./pages/admin/referrals.tsx";
-import AdminCashflowPage from "./pages/admin/cashflow.tsx";
-import AdminSupportPage from "./pages/admin/support.tsx";
 import InstallPrompt from "./components/InstallPrompt.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import AdminCourierConfigPanel from "./components/AdminCourierConfigPanel.tsx";
@@ -48,9 +45,33 @@ function AdminGuard({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function useScrollLock() {
+  useEffect(() => {
+    document.body.style.overscrollBehavior = "none";
+    document.documentElement.style.overscrollBehavior = "none";
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const target = e.target as HTMLElement;
+      const scrollable = target.closest(".overflow-y-auto");
+      if (!scrollable) {
+        if (e.cancelable) e.preventDefault();
+      }
+    };
+
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+    return () => {
+      document.body.style.overscrollBehavior = "";
+      document.documentElement.style.overscrollBehavior = "";
+      document.removeEventListener("touchmove", handleTouchMove);
+    };
+  }, []);
+}
+
 function AppShell() {
   const location = useLocation();
   const isAdmin = location.pathname.startsWith("/admin");
+  
+  useScrollLock();
 
   useEffect(() => {
     const unregister = registerMemoryCleanup({
@@ -71,7 +92,7 @@ function AppShell() {
   }, []);
 
   return (
-    <div className={`w-screen h-dvh overflow-hidden flex flex-col justify-start ${isAdmin ? "bg-white text-neutral-900" : "bg-[#f3f4f6] text-neutral-900"}`}>
+    <div className={`w-full h-dvh overflow-hidden flex flex-col justify-start ${isAdmin ? "bg-white text-neutral-900" : "bg-[#f3f4f6] text-neutral-900"}`}>
       <div className="flex-1 w-full flex flex-col min-h-0 overflow-y-auto">
         <AdminCourierConfigPanel />
         <CheckoutUiConsistency />
@@ -100,9 +121,6 @@ function AppShell() {
             <Route path="coupons" element={<AdminCouponConfiguratorPage />} />
             <Route path="referrals" element={<AdminReferralsPage />} />
             <Route path="legacy-discounts" element={<AdminDiscountsPage />} />
-            <Route path="analytics" element={<AdminAnalyticsPage />} />
-            <Route path="cashflow" element={<AdminCashflowPage />} />
-            <Route path="support" element={<AdminSupportPage />} />
             <Route path="ocr" element={<AdminReceiptOcrPage />} />
             <Route path="settings" element={<AdminSettingsPage />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />

@@ -14,7 +14,7 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="h-dvh w-screen overflow-hidden bg-white text-black flex flex-col">
+    <div className="h-dvh w-full overflow-hidden bg-white text-black flex flex-col">
       {!isDashboard && (
         <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-neutral-200 px-3 py-2 flex items-center justify-between">
           <button
@@ -33,7 +33,7 @@ export default function AdminLayout() {
           </button>
         </header>
       )}
-      <main className="flex-1 w-full max-w-full min-h-0 overflow-auto">
+      <main className="flex-1 w-full min-h-0 overflow-auto">
         <Outlet />
       </main>
       {isDashboard && (

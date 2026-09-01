@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Store, ShoppingCart, ListOrdered, Bell, User, Headphones } from "lucide-react";
 import { useCart } from "@/context/CartContext.tsx";
 import { useTelegram } from "@/context/TelegramContext.tsx";
@@ -7,11 +7,13 @@ import { useEffect, useState } from "react";
 
 export default function BottomNav() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { totalItems, pulse } = useCart();
   const { customer } = useTelegram();
   const path = location.pathname;
   const controls = useAnimation();
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [pendingNav, setPendingNav] = useState<string | null>(null);
 
   useEffect(() => {
     if (pulse > 0) {
@@ -62,38 +64,68 @@ export default function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-[21px] left-0 right-0 bg-white border-t border-neutral-200 z-40 shadow-lg w-full">
-      <div className="flex items-center justify-around h-10 px-2 w-full max-w-full mx-auto">
-        {navItems.map(({ href, icon: Icon, badge }) => {
-          const isActive = path === href || (href !== "/shop" && path.startsWith(href));
-          const isCart = href === "/shop/cart";
-          const isAlerts = href === "/shop/notifications";
-          const isCheckout = path.includes("/shop/checkout");
-          
-          const handleClick = (e: React.MouseEvent) => {
-            if (isCheckout && href !== path) {
-              if (!confirm("You have an ongoing checkout. Do you want to continue or discard your changes?")) {
+    <>
+      <nav className="fixed bottom-[21px] left-0 right-0 bg-white border-t border-neutral-200 z-40 shadow-lg w-full">
+        <div className="flex items-center justify-around h-10 px-2 w-full max-w-full mx-auto">
+          {navItems.map(({ href, icon: Icon, badge }) => {
+            const isActive = path === href || (href !== "/shop" && path.startsWith(href));
+            const isCart = href === "/shop/cart";
+            const isAlerts = href === "/shop/notifications";
+            const isCheckout = path.includes("/shop/checkout");
+            
+            const handleClick = (e: React.MouseEvent) => {
+              if (isCheckout && href !== path) {
                 e.preventDefault();
+                setPendingNav(href);
               }
-            }
-          };
+            };
 
-          return (
-            <Link key={href} to={href} onClick={handleClick} className={`flex flex-col items-center justify-center flex-1 h-full relative cursor-pointer transition-colors ${isActive ? "text-black font-bold" : "text-neutral-600 hover:text-black"}`}>
-              <div className="relative flex items-center justify-center">
-                <motion.div animate={isCart || isAlerts ? controls : {}}>
-                  <Icon size={20.5} className={`transition-transform duration-150 ${isActive ? "stroke-[2.5] scale-105 text-black" : "stroke-[1.75] text-neutral-700"}`} />
-                </motion.div>
-                {badge !== undefined && badge > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 bg-[#ef4444] text-white text-[10px] font-black rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center leading-none shadow-xs border border-white" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
-                    {badge > 99 ? "99+" : badge}
-                  </span>
-                )}
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
+            return (
+              <Link key={href} to={href} onClick={handleClick} className={`flex flex-col items-center justify-center flex-1 h-full relative cursor-pointer transition-colors ${isActive ? "text-black font-bold" : "text-neutral-600 hover:text-black"}`}>
+                <div className="relative flex items-center justify-center">
+                  <motion.div animate={isCart || isAlerts ? controls : {}}>
+                    <Icon size={20.5} className={`transition-transform duration-150 ${isActive ? "stroke-[2.5] scale-105 text-black" : "stroke-[1.75] text-neutral-700"}`} />
+                  </motion.div>
+                  {badge !== undefined && badge > 0 && (
+                    <span className="absolute -top-1.5 -right-2.5 bg-[#ef4444] text-white text-[10px] font-black rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center leading-none shadow-xs border border-white" style={{ fontFamily: "'Ubuntu', sans-serif" }}>
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+
+      {pendingNav && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center shadow-xl">
+            <h3 className="font-heading text-xl font-bold text-black mb-2">Leave Checkout?</h3>
+            <p className="text-sm text-neutral-600 mb-6 font-body">
+              You have an ongoing checkout. Do you want to continue shopping or discard your current session?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPendingNav(null)}
+                className="flex-1 px-4 py-3 bg-neutral-100 text-black font-semibold rounded-xl text-sm transition-colors active:bg-neutral-200"
+              >
+                Continue Checkout
+              </button>
+              <button
+                onClick={() => {
+                  const target = pendingNav;
+                  setPendingNav(null);
+                  navigate(target);
+                }}
+                className="flex-1 px-4 py-3 bg-black text-white font-semibold rounded-xl text-sm transition-colors active:bg-neutral-800"
+              >
+                Discard & Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -23,7 +23,7 @@ async function syncTelegramAvatar(customerId: string) {
 dotenv.config();
 
 const app = express();
-const PORT = Number(process.env.PORT || 3000);
+const PORT = 3000;
 const ADMIN_SESSION_COOKIE = "prime_admin_session";
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 

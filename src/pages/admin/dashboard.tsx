@@ -368,47 +368,8 @@ export default function AdminDashboardPage() {
             </button>
           </div>
 
-          {/* Row 3 */}
-          <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-            {/* ANALYTICS */}
-            <button
-              type="button"
-              onClick={() => navigate("/admin/analytics")}
-              className="h-[72px] sm:h-[80px] bg-white rounded-[12px] border-[1.5px] border-neutral-900 shadow-[0_3px_8px_rgba(0,0,0,0.12)] hover:shadow-[0_5px_12px_rgba(0,0,0,0.16)] active:scale-[0.98] transition-all flex items-center justify-start px-2 sm:px-3.5 gap-2 sm:gap-2.5"
-            >
-              <TrendingUp className="w-7 h-7 sm:w-8 sm:h-8 text-black shrink-0" strokeWidth={2} />
-              <span className="font-bold text-[13px] sm:text-[14px] uppercase tracking-wide text-black text-left leading-tight">
-                ANALYTICS
-              </span>
-            </button>
-
-            {/* CASHFLOW */}
-            <button
-              type="button"
-              onClick={() => navigate("/admin/cashflow")}
-              className="h-[72px] sm:h-[80px] bg-white rounded-[12px] border-[1.5px] border-neutral-900 shadow-[0_3px_8px_rgba(0,0,0,0.12)] hover:shadow-[0_5px_12px_rgba(0,0,0,0.16)] active:scale-[0.98] transition-all flex items-center justify-start px-2 sm:px-3.5 gap-2 sm:gap-2.5"
-            >
-              <Wallet className="w-7 h-7 sm:w-8 sm:h-8 text-black shrink-0" strokeWidth={2} />
-              <span className="font-bold text-[13px] sm:text-[14px] uppercase tracking-wide text-black text-left leading-tight">
-                CASHFLOW
-              </span>
-            </button>
-
-            {/* SUPPORT */}
-            <button
-              type="button"
-              onClick={() => navigate("/admin/support")}
-              className="h-[72px] sm:h-[80px] bg-white rounded-[12px] border-[1.5px] border-neutral-900 shadow-[0_3px_8px_rgba(0,0,0,0.12)] hover:shadow-[0_5px_12px_rgba(0,0,0,0.16)] active:scale-[0.98] transition-all flex items-center justify-start px-2 sm:px-3.5 gap-2 sm:gap-2.5"
-            >
-              <Headphones className="w-7 h-7 sm:w-8 sm:h-8 text-black shrink-0" strokeWidth={2} />
-              <span className="font-bold text-[13px] sm:text-[14px] uppercase tracking-wide text-black text-left leading-tight">
-                SUPPORT
-              </span>
-            </button>
-          </div>
-
-          {/* Row 4 (2 items spanning full width) */}
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+          {/* Row 4 (1 item spanning full width) */}
+          <div className="grid grid-cols-1 gap-2.5 sm:gap-3">
             {/* SYSTEM SETTINGS */}
             <button
               type="button"
@@ -420,7 +381,6 @@ export default function AdminDashboardPage() {
                 SYSTEM SETTINGS
               </span>
             </button>
-
             {/* RUN FULL DIAGNOSTICS */}
             <button
               type="button"
