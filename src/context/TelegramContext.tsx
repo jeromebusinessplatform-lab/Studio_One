@@ -61,7 +61,25 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
         }
         if (hydratedAvatar) void fetchWithTimeout("/api/auth/telegram/avatar-sync", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ initData }) }, 5000).catch(() => undefined);
       } catch (e: any) {
-        if (!cancelled) { setCustomer(getOrCreateGuestCustomer()); setSessionToken(null); setError(null); }
+        if (!cancelled) {
+          if (initUser) {
+             setCustomer({
+               telegramUserId: String(initUser.id),
+               telegramDisplayName: [initUser.first_name, initUser.last_name].filter(Boolean).join(" ") || `TG User ${initUser.id}`,
+               telegramUsername: initUser.username,
+               telegramFirstName: initUser.first_name,
+               telegramLastName: initUser.last_name,
+               telegramLanguageCode: initUser.language_code || "en",
+               avatarUrl: initUser.photo_url,
+             });
+             setSessionToken(initData);
+             setError(e.message);
+          } else {
+             setCustomer(getOrCreateGuestCustomer());
+             setSessionToken(null);
+             setError(null);
+          }
+        }
       } finally { if (!cancelled) setIsLoading(false); }
     };
     void authenticate();

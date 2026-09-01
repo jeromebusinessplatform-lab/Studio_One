@@ -72,7 +72,7 @@ export default function ShopLayout() {
         <QueueStrip />
       </div>
 
-      <main className="flex-1 w-full min-h-0 pt-[68px] pb-20">
+      <main className="flex-1 w-full min-h-0 pt-[104px] pb-20">
         <div className="w-full">
           <Outlet />
         </div>

@@ -220,7 +220,18 @@ export function installCheckoutRoutes(app: Application) {
       if (paymentMethod === "DIRECT_TRANSFER" && !input.receiptUrl) throw new Error("Payment proof is required for direct transfer");
 
       const now = Date.now();
-      const orderNumber = `${new Date().toISOString().slice(0, 10).replace(/-/g, "")}${Date.now().toString().slice(-8)}${Math.floor(100 + Math.random() * 900)}`;
+      const formatOrderNumber = (date: Date) => {
+        const parts = new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Manila",
+          day: "2-digit", month: "2-digit", year: "2-digit",
+          hour: "2-digit", minute: "2-digit", second: "2-digit",
+          hour12: false
+        }).formatToParts(date);
+        const values: Record<string, string> = {};
+        for (const part of parts) if (part.type !== "literal") values[part.type] = part.value;
+        return `${values.day}${values.month}${values.year}${values.hour}${values.minute}${values.second}`;
+      };
+      const orderNumber = formatOrderNumber(new Date(now));
 
       // Update product stocks
       for (const item of quote.normalizedItems) {

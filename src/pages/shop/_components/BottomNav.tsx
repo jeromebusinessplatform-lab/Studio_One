@@ -116,7 +116,11 @@ export default function BottomNav() {
                 onClick={() => {
                   const target = pendingNav;
                   setPendingNav(null);
-                  navigate(target);
+                  if (target) {
+                    navigate(target, { replace: true });
+                    // fallback if router doesn't change
+                    setTimeout(() => { if (window.location.pathname.includes('/checkout')) window.location.href = target; }, 100);
+                  }
                 }}
                 className="flex-1 px-4 py-3 bg-black text-white font-semibold rounded-xl text-sm transition-colors active:bg-neutral-800"
               >
