@@ -3,6 +3,7 @@ import type { Application, Request, Response } from "express";
 import { verifyTelegramInitData } from "./telegramAuth.js";
 import { installCheckoutRoutes } from "./checkoutRoutes.js";
 import { firestoreService } from "./firestoreService.js";
+import { ensureUniquePrimeMemberId } from "./primeIdentity.js";
 
 const TG_COOKIE = "prime_telegram_session";
 const TG_TTL_MS = 24 * 60 * 60 * 1000;
@@ -41,6 +42,7 @@ export function installReleaseRoutes(app: Application) {
       };
       if (!existing) {
         Object.assign(customer, {
+          primeMemberId: await ensureUniquePrimeMemberId("", String(user.id)),
           vipTier: "Bronze",
           points: 0,
           pointsBalance: 0,
