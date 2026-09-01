@@ -40,11 +40,6 @@ interface DiagnosticItem {
 }
 
 export default function AdminDashboardPage() {
-  console.log("AdminDashboardPage render");
-  useEffect(() => {
-    console.log("AdminDashboardPage mount");
-    return () => console.log("AdminDashboardPage unmount");
-  }, []);
   const navigate = useNavigate();
   const { queue: liveQueue } = useLiveQueue();
   const { allOrders: orders } = useOrders();
@@ -207,9 +202,9 @@ export default function AdminDashboardPage() {
   };
 
   return (
-    <div className="w-full bg-white text-black flex flex-col justify-between select-none font-condensed">
+    <div className="w-full max-w-full bg-white text-black flex flex-col justify-between select-none font-condensed">
       {/* Top Section */}
-      <div className="px-3 sm:px-4 pt-3 pb-2">
+      <div className="px-3 sm:px-4 pt-3 pb-2 w-full max-w-full">
         {/* Header matching exact layout */}
         <header className="flex items-center justify-between gap-2 pb-2">
           {/* Logo */}

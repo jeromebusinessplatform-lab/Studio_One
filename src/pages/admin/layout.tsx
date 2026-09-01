@@ -14,9 +14,9 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="min-h-[100dvh] w-full max-w-full bg-white text-black flex flex-col">
+    <div className="h-dvh w-screen overflow-hidden bg-white text-black flex flex-col">
       {!isDashboard && (
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-neutral-200 px-3 sm:px-6 py-2 flex items-center justify-between">
+        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-neutral-200 px-3 py-2 flex items-center justify-between">
           <button
             type="button"
             onClick={() => navigate("/admin")}

@@ -71,8 +71,8 @@ function AppShell() {
   }, []);
 
   return (
-    <div className={`w-full min-h-[100dvh] flex flex-col justify-start overflow-x-hidden ${isAdmin ? "bg-white text-neutral-900" : "bg-[#f3f4f6] text-neutral-900"}`}>
-      <div className="flex-1 w-full flex flex-col min-h-0">
+    <div className={`w-screen h-dvh overflow-hidden flex flex-col justify-start ${isAdmin ? "bg-white text-neutral-900" : "bg-[#f3f4f6] text-neutral-900"}`}>
+      <div className="flex-1 w-full flex flex-col min-h-0 overflow-y-auto">
         <AdminCourierConfigPanel />
         <CheckoutUiConsistency />
         <Routes>

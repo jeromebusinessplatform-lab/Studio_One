@@ -19,13 +19,15 @@
     font-weight: 400;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    overflow-y: auto;
+    overflow: hidden;
+    height: 100dvh;
+    width: 100vw;
   }
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Roboto Condensed', 'Samsung One', sans-serif;
-    font-weight: 400;
+  #root {
+    display: block;
+    height: 100%;
+    width: 100%;
   }
-}
 
 .font-heading {
   font-family: 'Roboto Condensed', 'Samsung One', sans-serif;
@@ -82,4 +84,5 @@ div:has(input[placeholder="COUPON"]),
 div:has(input[placeholder="REFERRAL"]) {
   display: block !important;
   visibility: visible !important;
+}
 }
