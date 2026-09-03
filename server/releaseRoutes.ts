@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import type { Application, Request, Response } from "express";
 import { verifyTelegramInitData } from "./telegramAuth.js";
-import { installCheckoutRoutes } from "./checkoutRoutes.js";
 import { firestoreService } from "./firestoreService.js";
 import { ensureUniquePrimeMemberId } from "./primeIdentity.js";
 
@@ -24,8 +23,6 @@ function setCookie(res: Response, name: string, value: string, maxAge: number) {
 function cleanCourier(body: any) { const name = String(body?.name || "").trim(); const baseFare = Number(body?.baseFare); const baseDistanceKm = Number(body?.baseDistanceKm); const perKmCharge = Number(body?.perKmCharge); if (!name || name.length > 120 || !Number.isFinite(baseFare) || baseFare < 0 || !Number.isFinite(baseDistanceKm) || baseDistanceKm < 0 || !Number.isFinite(perKmCharge) || perKmCharge < 0) throw new Error("Invalid courier pricing configuration"); return { name, baseFare, baseDistanceKm, perKmCharge, platformFeeEnabled: body?.platformFeeEnabled === true, platformFee: Math.max(0, Number(body?.platformFee || 0)), nightDifferentialEnabled: body?.nightDifferentialEnabled === true, nightDifferentialFee: Math.max(0, Number(body?.nightDifferentialFee || 0)), surchargeEnabled: body?.surchargeEnabled === true, surchargeFee: Math.max(0, Number(body?.surchargeFee || 0)), isAvailable: body?.isAvailable !== false, logoUrl: String(body?.logoUrl || "/primelogo.png").slice(0, 500), updatedAt: Date.now() }; }
 
 export function installReleaseRoutes(app: Application) {
-  installCheckoutRoutes(app);
-
   app.post("/api/auth/telegram", async (req, res) => {
     try {
       const initData = typeof req.body?.initData === "string" ? req.body.initData : "";
@@ -111,7 +108,7 @@ export function installReleaseRoutes(app: Application) {
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
     const isAdmin = adminSession(req);
-    const tg = telegramUserId(req) || (typeof req.query?.userId === "string" ? req.query.userId : null);
+    const tg = telegramUserId(req);
     if (!isAdmin && !tg) {
       return res.json({ orders: [], syncedAt: Date.now() });
     }
@@ -154,7 +151,7 @@ export function installReleaseRoutes(app: Application) {
   app.get("/api/customers", async (req, res) => {
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     const isAdmin = adminSession(req);
-    const tg = telegramUserId(req) || (typeof req.query?.userId === "string" ? req.query.userId : null);
+    const tg = telegramUserId(req);
     if (!isAdmin && !tg) {
       return res.json({ customers: [] });
     }

@@ -8,6 +8,18 @@ import crypto from "node:crypto";
 import { installReleaseRoutes } from "./server/releaseRoutes.js";
 import { installNotificationRoutes } from "./server/notificationRoutes.js";
 import { firestoreService } from "./server/firestoreService.js";
+import { installReferralGuard } from "./server/referralGuard.js";
+import { installReferralRoutes } from "./server/referralRoutes.js";
+import { installCouponAdminRoutes } from "./server/couponAdminRoutes.js";
+import { installCheckoutRoutesV2 } from "./server/checkoutRoutesV2.js";
+import { installCommerceRepairRoutes } from "./server/commerceRepairRoutes.js";
+import { installOrderPatchGuardRoutes } from "./server/orderPatchGuardRoutes.js";
+import { installOrderWorkflowRoutes } from "./server/orderWorkflowRoutes.js";
+import { installQueueRoutes } from "./server/queueRoutes.js";
+import { installProductComparisonRoutes } from "./server/productComparisonRoutes.js";
+import { installTelegramAvatarRoutes } from "./server/telegramAvatarRoutes.js";
+import { installAdminComparisonRoutes } from "./server/adminComparisonRoutes.js";
+import { installMemberProfileRoutes } from "./server/memberProfileRoutes.js";
 
 // Utility for syncing Telegram Avatar
 async function syncTelegramAvatar(customerId: string) {
@@ -26,9 +38,17 @@ const app = express();
 const PORT = 3000;
 const ADMIN_SESSION_COOKIE = "prime_admin_session";
 const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
+app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "same-origin");
+  res.setHeader("X-Frame-Options", "DENY");
+  next();
+});
 
 function getCookie(req: express.Request, name: string): string | null {
   const header = req.headers.cookie || "";
@@ -65,6 +85,22 @@ function isValidAdminSession(token: string | null): boolean {
 function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!isValidAdminSession(getCookie(req, ADMIN_SESSION_COOKIE))) return res.status(401).json({ error: "Admin authentication required" });
   return next();
+}
+
+function rateLimit(maxRequests: number, windowMs: number) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const now = Date.now();
+    const key = `${req.path}:${req.socket.remoteAddress || "unknown"}`;
+    const previous = rateLimitBuckets.get(key);
+    const bucket = !previous || previous.resetAt <= now ? { count: 0, resetAt: now + windowMs } : previous;
+    bucket.count += 1;
+    rateLimitBuckets.set(key, bucket);
+    if (bucket.count > maxRequests) {
+      res.setHeader("Retry-After", Math.ceil((bucket.resetAt - now) / 1000));
+      return res.status(429).json({ error: "Too many requests. Please try again later." });
+    }
+    return next();
+  };
 }
 
 function cleanChargePayload(body: any) {
@@ -381,11 +417,12 @@ function analyzeReceiptHeuristic(rawImageString: string, expectedAmount?: number
 
 app.get("/api/ocr/status", (_req, res) => { const hasGeminiKey = !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0; res.json({ enabled: true, model: "gemini-3.7-flash", hasApiKey: hasGeminiKey, supportedChannels: ["GCash", "Maya", "BPI Mobile", "BDO Digital", "UnionBank", "Metrobank", "InstaPay", "PESONet", "Physical POS Receipts"] }); });
 
-app.post("/api/ocr/analyze-receipt", async (req, res) => {
+app.post("/api/ocr/analyze-receipt", rateLimit(10, 60_000), async (req, res) => {
   const startTime = Date.now();
   try {
     const { imageBase64, mimeType = "image/jpeg", expectedAmount, expectedReceiver = "PRIME ENTERPRISE PH" } = req.body;
     if (!imageBase64 || typeof imageBase64 !== "string") return res.status(400).json({ success: false, error: "Missing imageBase64 in request body" });
+    if (!/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(imageBase64) || imageBase64.length > 8_000_000) return res.status(413).json({ success: false, error: "Receipt must be a JPG, PNG, or WEBP image smaller than 6 MB" });
     const cleanBase64 = imageBase64.replace(/^data:image\/[a-z\+]+;base64,/, ""); const taggunApiKey = process.env.TAGGUN_API_KEY;
     if (taggunApiKey && taggunApiKey.trim().length > 0) {
       try {
@@ -398,7 +435,22 @@ app.post("/api/ocr/analyze-receipt", async (req, res) => {
   } catch (error: any) { console.error("Receipt OCR Server Error:", error); return res.status(500).json({ success: false, error: error.message || "Internal server error during OCR receipt processing" }); }
 });
 
+// Install every application route explicitly. Do not rely on a preload-time Express
+// prototype patch: it is not reliable after bundling and silently left API routes behind
+// the SPA fallback in production.
+installReferralGuard(app);
+installCommerceRepairRoutes(app);
+installReferralRoutes(app);
+installCouponAdminRoutes(app);
+installCheckoutRoutesV2(app);
+installOrderPatchGuardRoutes(app);
+installOrderWorkflowRoutes(app);
+installQueueRoutes(app);
 installReleaseRoutes(app);
+installProductComparisonRoutes(app);
+installTelegramAvatarRoutes(app);
+installAdminComparisonRoutes(app);
+installMemberProfileRoutes(app);
 installNotificationRoutes(app);
 
 async function startServer() {

@@ -194,7 +194,7 @@ export default function AdminDiscountsPage() {
         </div>
 
         <div className="rounded-2xl border border-neutral-200 p-3 space-y-3">
-          <div className="grid grid-cols-2 gap-2"><label className="space-y-1"><span className="text-[10px] font-bold uppercase text-neutral-500">Discount Type</span><select value={form.type} onChange={(e) => set("type", e.target.value as FormState["type"])} className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2.5 text-xs"><option value="percent">Percentage</option><option value="fixed">Fixed Amount</option><option value="free_delivery">Free Delivery</option></select></label><NumberField label="Discount Value" value={form.value} onChange={set("value" as any, undefined as never) as any} placeholder="20" /></div>
+          <div className="grid grid-cols-2 gap-2"><label className="space-y-1"><span className="text-[10px] font-bold uppercase text-neutral-500">Discount Type</span><select value={form.type} onChange={(e) => set("type", e.target.value as FormState["type"])} className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2.5 text-xs"><option value="percent">Percentage</option><option value="fixed">Fixed Amount</option><option value="free_delivery">Free Delivery</option></select></label><NumberField label="Discount Value" value={form.value} onChange={(value: string) => set("value", value)} placeholder="20" /></div>
           <div className="grid grid-cols-2 gap-2"><NumberField label="Max Discount Cap" value={form.maxDiscount} onChange={(value: string) => set("maxDiscount", value)} placeholder="Optional" /><NumberField label="Priority" value={form.priority} onChange={(value: string) => set("priority", value)} placeholder="0" /></div>
         </div>
 
