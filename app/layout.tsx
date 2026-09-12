@@ -3,6 +3,7 @@ import { Oswald, Montserrat } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
 import ClientWrapper from './components/client-wrapper';
+import { CartProvider } from './components/cart-context';
 
 const oswald = Oswald({
   subsets: ['latin'],
@@ -49,7 +50,9 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-[#0b0d11] text-[#f3f4f6] min-h-screen antialiased selection:bg-amber-500 selection:text-black">
-        {children}
+        <CartProvider>
+          {children}
+        </CartProvider>
       </body>
     </html>
   );
