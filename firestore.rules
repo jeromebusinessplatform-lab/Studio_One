@@ -1,13 +1,27 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /products/{document=**} { allow read, write: if true; }
-    match /config/{document=**} { allow read, write: if true; }
-    match /couriers/{document=**} { allow read, write: if true; }
-    match /charges/{document=**} { allow read, write: if true; }
-    match /discounts/{document=**} { allow read, write: if true; }
-    match /orders/{document=**} { allow read, write: if true; }
-    match /customers/{document=**} { allow read, write: if true; }
-    match /{document=**} { allow read, write: if true; }
+    
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+      
+      match /fingerprints/{fingerprintId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+    
+    match /admins/{adminId} {
+      allow read: if false; // Admin code check should be server-side
+      allow write: if false;
+    }
   }
 }

@@ -1,87 +1,82 @@
 {
   "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Admin configuration",
+      "type": "object",
+      "properties": {
+        "accessCode": { "type": "string", "description": "Admin Access Code" }
+      },
+      "required": ["accessCode"]
+    },
     "Product": {
       "title": "Product",
-      "description": "Store inventory product or combination bundle item",
+      "description": "Product in the catalog",
       "type": "object",
       "properties": {
-        "name": { "type": "string", "maxLength": 200 },
-        "subname": { "type": "string", "maxLength": 200 },
-        "description": { "type": "string", "maxLength": 2000 },
-        "category": { "type": "string", "maxLength": 100 },
-        "price": { "type": "number" },
-        "salePrice": { "type": "number" },
-        "costing": { "type": "number" },
-        "stock": { "type": "number" },
-        "available": { "type": "boolean" },
-        "badge": { "type": "string", "enum": ["NEW", "SALE", "LOW_STOCK", ""] },
-        "badgeExpiry": { "type": "string" },
-        "image": { "type": "string" },
-        "sortOrder": { "type": "number" },
-        "isCombination": { "type": "boolean" },
-        "bundleItems": { "type": "array" },
-        "bundleCalculatedPrice": { "type": "number" }
+        "name": { "type": "string", "description": "Product Name" },
+        "price": { "type": "number", "description": "Price" },
+        "imageUrl": { "type": "string", "description": "Image URL" },
+        "description": { "type": "string", "description": "Description" },
+        "category": { "type": "string", "description": "Category" },
+        "stock": { "type": "number", "description": "Available stock quantity" },
+        "bundleConfig": { "type": "object", "description": "Configuration for bundles/discounts" }
       },
-      "required": ["name", "price", "stock", "available"]
+      "required": ["name", "price", "stock"]
     },
-    "Courier": {
-      "title": "Courier",
-      "description": "Courier fleet delivery partner config",
+    "User": {
+      "title": "User",
+      "description": "Telegram user profile and PRIME mapping",
       "type": "object",
       "properties": {
-        "name": { "type": "string", "maxLength": 100 },
-        "tag": { "type": "string", "maxLength": 50 },
-        "baseFare": { "type": "number" },
-        "baseDistanceKm": { "type": "number" },
-        "perKmCharge": { "type": "number" },
-        "platformFee": { "type": "number" },
-        "platformFeeEnabled": { "type": "boolean" },
-        "nightDifferentialFee": { "type": "number" },
-        "nightDifferentialEnabled": { "type": "boolean" },
-        "surchargeFee": { "type": "number" },
-        "surchargeEnabled": { "type": "boolean" },
-        "isAvailable": { "type": "boolean" },
-        "estimatedMinutes": { "type": "string" }
+        "tgUserId": { "type": "string", "description": "Telegram User ID" },
+        "tgName": { "type": "string", "description": "Telegram Name" },
+        "tgUsername": { "type": "string", "description": "Telegram Handle" },
+        "phoneNumber": { "type": "string", "description": "Phone Number" },
+        "primeMemberId": { "type": "string", "description": "12-char Alphanumeric Member ID" },
+        "groups": { "type": "array", "description": "List of group IDs" },
+        "channels": { "type": "array", "description": "List of channel IDs" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "baseFare", "isAvailable"]
+      "required": ["tgUserId", "primeMemberId"]
     },
-    "Config": {
-      "title": "Config",
-      "description": "System settings and categories",
+    "Fingerprint": {
+      "title": "Fingerprint",
+      "description": "Device and session fingerprint snapshot",
       "type": "object",
       "properties": {
-        "list": { "type": "array" }
-      }
+        "userId": { "type": "string" },
+        "enrollmentDate": { "type": "string", "format": "date-time" },
+        "lastSeen": { "type": "string", "format": "date-time" },
+        "deviceId": { "type": "string" },
+        "appId": { "type": "string" },
+        "browser": { "type": "string" },
+        "graphics": { "type": "string" },
+        "ipEnrollment": { "type": "string" },
+        "ipSession": { "type": "string" },
+        "isp": { "type": "string" },
+        "vpnDetected": { "type": "boolean" },
+        "location": { "type": "object" }
+      },
+      "required": ["userId", "deviceId"]
     }
   },
   "firestore": {
+    "/admins/{adminId}": {
+      "schema": "Admin",
+      "description": "Admin configuration"
+    },
     "/products/{productId}": {
       "schema": "Product",
-      "description": "Catalog products and bundle offerings"
+      "description": "Product catalog"
     },
-    "/couriers/{courierId}": {
-      "schema": "Courier",
-      "description": "Logistics fleet and courier configurations"
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile collection"
     },
-    "/config/{configId}": {
-      "schema": "Config",
-      "description": "Global store configuration and categories"
-    },
-    "/orders/{orderId}": {
-      "schema": "object",
-      "description": "Customer orders and fulfillment transactions"
-    },
-    "/customers/{customerId}": {
-      "schema": "object",
-      "description": "Customer VIP profiles and membership data"
-    },
-    "/charges/{chargeId}": {
-      "schema": "object",
-      "description": "Platform charges and service fees"
-    },
-    "/discounts/{discountId}": {
-      "schema": "object",
-      "description": "Promotional coupon codes"
+    "/users/{userId}/fingerprints/{fingerprintId}": {
+      "schema": "Fingerprint",
+      "description": "User specific fingerprints"
     }
   }
 }
